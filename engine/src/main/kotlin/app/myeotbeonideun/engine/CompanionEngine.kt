@@ -149,7 +149,8 @@ class CompanionEngine(
                 else -> whenSituation
             }
             PassengerIntent.WHY_STOPPED -> stopSituation ?: currentFactSituation()
-            PassengerIntent.GO_HOME -> "ask_gohome"
+            // 집으로 가는 길이면 "…에 들렀다가 집에 가요"가 맞지 않는다. 어디 가는지를 그대로 말한다.
+            PassengerIntent.GO_HOME -> if (headingHome()) "ask_where" else "ask_gohome"
         }
         val out = ArrayList<EngineAction>()
         offer(
@@ -163,7 +164,10 @@ class CompanionEngine(
         return out
     }
 
-    /** '잠시 조용히'. 안전 알림과 운전자가 자리를 비운 동안의 안내는 그대로 한다. */
+    /**
+     * '잠시 조용히'. 먼저 말하기·대답·멈춤 안내·창문과 안전띠 권유를 쉰다.
+     * 주행 중 문 열림, 도착, 운전자가 자리를 비운 동안의 안내는 그대로 한다(운전자 화면의 알림 한 줄도 그대로).
+     */
     fun quiet(nowMs: Long, durationMs: Long = params.quietMs): List<EngineAction> {
         if (phase == Phase.ENDED) return emptyList()
         quietUntil = nowMs + durationMs
@@ -326,8 +330,9 @@ class CompanionEngine(
         if (!departed) return
         phase = Phase.DRIVING
         departedAt = now
+        // 짧은 길이라 이미 '곧 도착' 구간이어도 첫마디는 출발 안내다. 구간은 화면과 다음 말에만 반영한다.
         stage = computeStage(now)
-        stageToAnnounce = stage
+        stageToAnnounce = Stage.JUST_DEPARTED
     }
 
     /** 멈춤의 순간(명세 3.3). */
@@ -416,7 +421,7 @@ class CompanionEngine(
         stageToAnnounce = null
         emit(
             Candidate(
-                s.situation, Priority.PROACTIVE, SpeechKind.PROACTIVE, now,
+                stageSituation(s), Priority.PROACTIVE, SpeechKind.PROACTIVE, now,
                 redirectEligible = s != Stage.JUST_DEPARTED,
             ),
             now, out, false,
@@ -467,7 +472,23 @@ class CompanionEngine(
 
     /** 출발 직후에 다시 말할 때는 "이제 출발해요" 대신 어디 가는지를 말한다. */
     private fun stageSituationForRepeat(): String =
-        if (stage == Stage.JUST_DEPARTED) "ask_where" else stage.situation
+        if (stage == Stage.JUST_DEPARTED) "ask_where" else stageSituation(stage)
+
+    /**
+     * 그 구간에서 하는 말의 상황 이름. 분 숫자는 "5분쯤" 하나뿐이고(명세 3.2),
+     * 그 말은 남은 시간이 3분 넘고 5분 이하일 때만 사실이다. 그보다 가까우면 "거의 다 왔어요"로 말한다.
+     */
+    private fun stageSituation(s: Stage): String =
+        if (s == Stage.SOON && !fiveMinuteLineFits()) Stage.NEAR.situation else s.situation
+
+    private fun fiveMinuteLineFits(): Boolean {
+        val remain = signals.nav.remainSec ?: return false
+        return remain > FIVE_MIN_LINE_MIN_SEC && remain <= StageCalculator.SOON_SEC
+    }
+
+    /** 가는 곳이 집인지. '집에서 쉬기'를 골랐거나 가는 곳 이름이 집이면 그렇게 본다. */
+    private fun headingHome(): Boolean =
+        config.purpose == Purpose.REST || config.place.filterNot { it.isWhitespace() } in HOME_NAMES
 
     private fun isRedirectEligible(situation: String): Boolean =
         situation.startsWith("ask_") || situation.startsWith("stage_")
@@ -511,7 +532,9 @@ class CompanionEngine(
         val speaking = now < busyUntil
         when {
             channelFree(now) -> emit(c, now, out, interrupt = false)
-            c.priority == Priority.SAFETY -> emit(c, now, out, interrupt = speaking)
+            // 안전 알림은 다른 말을 끊는다. 안전 알림끼리는 끊지 않고 차례로 말한다(문 안내가 창문 안내에 잘리지 않게).
+            c.priority == Priority.SAFETY && !(speaking && busyPriority == Priority.SAFETY) ->
+                emit(c, now, out, interrupt = speaking)
             speaking && c.priority > busyPriority -> emit(c, now, out, interrupt = true)
             else -> {
                 pending.removeAll { it.situation == c.situation }
@@ -563,16 +586,29 @@ class CompanionEngine(
         Purpose.CUSTOM -> config.customPurposeLine.trim().takeIf { it.isNotEmpty() }?.let {
             if (it.last() in ".!?") it else "$it."
         }
-        else -> config.purpose.situation?.let { script.next(it) }
+        else -> config.purpose.situation?.let { script.next(it) }?.let(::withoutCall)
+    }
+
+    /**
+     * 대본의 화제 전환 줄도 호칭으로 시작한다(명세 10절). 대답 뒤에 이어 붙일 때는 그 호칭 부름을 떼어,
+     * 한 번의 말에 호칭이 두 번 들리지 않게 한다("어머니, … 가서 같이 식사하세요.").
+     */
+    private fun withoutCall(line: String): String {
+        val call = config.honorific.trim()
+        if (call.isEmpty() || !line.startsWith(call)) return line
+        val rest = line.substring(call.length).trimStart()
+        return if (rest.startsWith(",")) rest.substring(1).trimStart() else line
     }
 
     private fun notify(situation: String, urgent: Boolean, now: Long, out: MutableList<EngineAction>) {
         val text = script.next(situation) ?: return
+        out += DriverNotice(text, situation, urgent)
+        // 급한 알림(주행 중 문 열림 등)이 떠 있는 동안에는 덜 급한 알림이 그 한 줄을 차지하지 않는다.
+        if (notice != null && noticeUrgent && !urgent) return
         notice = text
         noticeSituation = situation
         noticeUrgent = urgent
         noticeAt = now
-        out += DriverNotice(text, situation, urgent)
     }
 
     private fun clearNotice() {
@@ -591,6 +627,10 @@ class CompanionEngine(
         /** 남은 시간·거리가 이 안이고 P단이면 도착으로 본다. */
         const val ARRIVE_REMAIN_SEC = 60
         const val ARRIVE_REMAIN_METERS = 150
+        /** 남은 시간이 이보다 많고 5분 이하일 때만 "5분쯤 남았어요"를 쓴다. */
+        const val FIVE_MIN_LINE_MIN_SEC = 3 * 60
+        /** 가는 곳 이름이 이것이면 집으로 가는 길로 본다(공백은 빼고 견준다). */
+        val HOME_NAMES = setOf("집", "우리집", "댁", "자택")
 
         /** 느리게 말할 때 걸리는 시간 어림: 음절당 0.24초 + 문장 사이 쉼. */
         fun estimateSpeechMs(text: String): Long {

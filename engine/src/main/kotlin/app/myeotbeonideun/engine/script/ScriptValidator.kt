@@ -17,7 +17,7 @@ data class Finding(
 /**
  * 대본 검사기. 명세 3.6 '말의 원칙'과 10절 형식 보정을 규칙으로 옮긴 것이다.
  *
- * - R1 동승자에게 하는 줄은 호칭으로 시작한다.
+ * - R1 동승자에게 하는 줄은 호칭으로 시작한다(화제 전환 줄도 같다. 엔진이 대답 뒤에 붙일 때 호칭을 뗀다).
  * - R2 한 문장 18음절 이하, 한 줄에 최대 두 문장(화제 전환은 한 문장).
  * - R3 고치거나 따지거나 시험하는 말(금지어)을 쓰지 않는다.
  * - R4 상황마다 변형이 둘 이상이고 서로 달라야 한다(같은 사실, 다른 표현).
@@ -209,7 +209,7 @@ object ScriptValidator {
 
         when (to) {
             Audience.PASSENGER -> {
-                if (!isRedirect && !line.trimStart().startsWith("{호칭}")) {
+                if (!line.trimStart().startsWith("{호칭}")) {
                     err("R1", "호칭({호칭})으로 시작해야 합니다")
                 }
                 val max = if (isRedirect) MAX_SENTENCES_REDIRECT else MAX_SENTENCES

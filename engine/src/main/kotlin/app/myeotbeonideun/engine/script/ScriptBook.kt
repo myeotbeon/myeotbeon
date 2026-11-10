@@ -15,7 +15,7 @@ enum class Audience(val id: String) {
 data class Situation(val key: String, val to: Audience, val lines: List<String>)
 
 /**
- * 대본 전체(scripts_ko.json). 대본은 사람이 쓴 고정 문장이고,
+ * 대본 전체(scripts_ko.json). 대본은 미리 써 둔 고정 문장이고,
  * 실행 중에 문장을 새로 만들지 않는다(명세 3.6 R6).
  */
 class ScriptBook(val version: Int, val situations: Map<String, Situation>) {

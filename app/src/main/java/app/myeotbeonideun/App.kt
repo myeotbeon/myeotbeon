@@ -48,7 +48,7 @@ class AppContainer(private val app: Application) {
     val speech = SpeechController(app, scope)
     val listener: PassengerListener = PleosPassengerListener(app)
 
-    /** 사람이 쓴 고정 대본. 실행 중에 문장을 만들지 않는다. */
+    /** 미리 써 둔 고정 대본. 실행 중에 문장을 만들지 않는다. */
     val script: ScriptBook by lazy {
         ScriptBook.parse(app.assets.open(SCRIPT_ASSET).bufferedReader(Charsets.UTF_8).use { it.readText() })
     }

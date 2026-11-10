@@ -142,7 +142,7 @@ class DemoSignalSource(private val scope: CoroutineScope) : SignalSource {
             step("기어 D", 6) { it.copy(gear = Gear.DRIVE) }
             step("주행 중 동승 좌석 문 열림 — 운전자에게 바로 알립니다", 8) { it.copy(doorOpen = it.doorOpen + (seat to true)) }
             step("문 닫음", 4) { it.copy(doorOpen = it.doorOpen + (seat to false)) }
-            step("남은 시간 2분 — 곧 도착을 알립니다", 10) { it.copy(nav = it.nav.copy(remainSec = 120, remainMeters = 600)) }
+            step("남은 시간 2분 — 거의 다 왔다고 알립니다", 10) { it.copy(nav = it.nav.copy(remainSec = 120, remainMeters = 600)) }
             step("목적지에서 기어 P — 도착을 알립니다", 10) {
                 it.copy(gear = Gear.PARK, nav = it.nav.copy(remainSec = 20, remainMeters = 50))
             }

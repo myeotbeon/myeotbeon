@@ -95,7 +95,7 @@
     <string name="settings_safety">안전 안내</string>
     <string name="settings_safety_body">이 앱은 안전장치가 아니에요. 문과 창문이 열리는 것을 막지 못하고, 알려 드릴 뿐이에요. 뒷문 어린이 보호 잠금과 창문 잠금을 함께 써 주세요. 안내 음성은 동승자를 위한 것이니 운전하는 분은 앞만 보세요.</string>
     <string name="settings_privacy">개인정보 안내</string>
-    <string name="settings_privacy_body">이 앱은 서버가 없고, 인터넷으로 아무것도 보내지 않아요. 목소리는 녹음하지 않고, 알아들은 말도 저장하지 않아요. 기기에 남는 것은 자주 가는 길과 횟수 기록뿐이고, ‘모두 지우기’로 언제든 지울 수 있어요.</string>
+    <string name="settings_privacy_body">이 앱은 서버가 없어요. 말하기와 알아듣기는 기기 안 음성 엔진만 써요. 목소리는 녹음하지 않고, 알아들은 말도 저장하지 않아요. 기기에 남는 것은 자주 가는 길과 횟수 기록뿐이고, ‘모두 지우기’로 언제든 지울 수 있어요.</string>
     <string name="settings_demo">체험 모드</string>
     <string name="settings_demo_note">차량 신호 대신 모의 신호로 실행해요. 화면에 ‘체험 모드’라고 표시돼요.</string>
     <string name="settings_demo_only">이 기기는 차량이 아니어서 체험 모드로만 실행돼요.</string>

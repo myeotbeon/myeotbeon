@@ -154,6 +154,24 @@ class CompanionEngineTest {
     }
 
     @Test
+    fun `화제 전환을 붙인 말에서도 호칭은 한 번만 들린다`() {
+        for (purpose in listOf(Purpose.CLINIC, Purpose.MEAL, Purpose.FAMILY, Purpose.REST)) {
+            val rig = Rig(TripConfig(honorific = "할머니", place = "큰딸 집", purpose = purpose))
+            rig.startAndDepart()
+            rig.clear()
+            repeat(8) { rig.repeat(); rig.advance(12) } // 출발 2분 전에 끝나 구간 안내가 끼지 않는다
+            val withRedirect = rig.spoken().filter { ScriptValidator.splitSentences(it.text).size == 3 }
+            assertEquals("$purpose", 4, withRedirect.size)
+            assertEquals("화제 전환 변형 네 개를 돌려 쓴다", 4, withRedirect.map { it.text.substringAfterLast(". ") }.toSet().size)
+            for (line in rig.spoken()) {
+                assertTrue(line.text, line.text.startsWith("할머니, "))
+                assertEquals(line.text, 1, Regex("할머니").findAll(line.text).count())
+                assertEquals(line.text, 1, line.text.count { it == ',' })
+            }
+        }
+    }
+
+    @Test
     fun `직접 쓴 한마디는 그대로 읽는다`() {
         val rig = Rig(TripConfig(place = "큰딸 집", purpose = Purpose.CUSTOM, customPurposeLine = "가서 손주 얼굴 봐요"))
         rig.startAndDepart()
@@ -196,9 +214,67 @@ class CompanionEngineTest {
         val rig = Rig()
         rig.startAndDepart()
         rig.clear()
-        rig.nav { copy(remainSec = 120) }
+        rig.nav { copy(remainSec = 290) }
         rig.advance(5)
+        val line = rig.spoken("stage_5min").single()
+        assertTrue(line.text, line.text.contains("5분쯤"))
+        assertEquals(Stage.SOON, rig.snapshot().stage)
+    }
+
+    @Test
+    fun `분 숫자는 남은 시간이 3분에서 5분 사이일 때만 말한다`() {
+        // 명세 6-8: 남은 시간 2분 → "거의 다 왔어요"
+        val near = Rig()
+        near.startAndDepart()
+        near.clear()
+        near.nav { copy(remainSec = 120) }
+        near.advance(5)
+        assertEquals(Stage.SOON, near.snapshot().stage)
+        assertEquals("stage_near", near.spoken().single().situation)
+        assertTrue(near.spoken("stage_5min").isEmpty())
+
+        // 5분쯤이라고 말한 뒤 더 가까워지면, 다시 시켰을 때는 숫자 없이 말한다
+        val rig = Rig()
+        rig.startAndDepart()
+        rig.nav { copy(remainSec = 300) }
+        rig.advance(12)
         assertEquals(1, rig.spoken("stage_5min").size)
+        rig.nav { copy(remainSec = 181) }
+        rig.repeat(); rig.advance(12)
+        assertEquals(2, rig.spoken("stage_5min").size)
+        rig.nav { copy(remainSec = 180) }
+        rig.repeat(); rig.advance(12)
+        assertEquals("stage_near", rig.spoken().last().situation)
+
+        // 5분보다 많이 남았을 때 하는 말에는 숫자가 없다
+        val far = Rig(TripConfig(place = "큰딸 집", interval = IntervalMode.FIVE_MIN))
+        far.startAndDepart()
+        far.nav { copy(remainSec = 1400) }
+        far.advance(700)
+        far.nav { copy(remainSec = 500) }
+        far.advance(400)
+        assertTrue(far.spoken().size >= 4)
+        far.spoken().forEach { assertFalse(it.text, it.text.any(Char::isDigit)) }
+    }
+
+    @Test
+    fun `내비 없이 근접 알림으로 곧 도착을 알 때도 분 숫자를 말하지 않는다`() {
+        val rig = Rig()
+        rig.signals = rig.signals.copy(nav = NavState())
+        rig.startAndDepart()
+        rig.clear()
+        rig.nav { copy(nearDestination = true) }
+        rig.advance(5)
+        assertEquals(Stage.SOON, rig.snapshot().stage)
+        assertEquals("stage_near", rig.spoken().single().situation)
+    }
+
+    @Test
+    fun `5분이 안 되는 짧은 길도 첫마디는 출발 안내다`() {
+        val rig = Rig()
+        rig.signals = rig.signals.copy(nav = NavState(guiding = true, totalSec = 240, remainSec = 240))
+        rig.startAndDepart()
+        assertEquals(listOf("intro", "depart"), rig.spoken().map { it.situation })
         assertEquals(Stage.SOON, rig.snapshot().stage)
     }
 
@@ -505,6 +581,57 @@ class CompanionEngineTest {
     }
 
     @Test
+    fun `우선순위는 안전 알림 다음 멈춤 다음 대답 다음 먼저 말하기 순이다`() {
+        assertTrue(Priority.SAFETY > Priority.STOP)
+        assertTrue(Priority.STOP > Priority.ANSWER)
+        assertTrue(Priority.ANSWER > Priority.PROACTIVE)
+
+        // 대답은 먼저 말하기를 끊는다
+        val a = Rig()
+        a.startAndDepart()
+        a.clear()
+        a.nav { copy(remainSec = 1400) }
+        a.advance(1)
+        assertEquals(Priority.PROACTIVE, a.spoken("stage_half").single().priority)
+        a.repeat()
+        assertTrue("대답은 먼저 말하기를 끊는다", a.spoken().last().interrupt)
+        assertEquals(Priority.ANSWER, a.spoken().last().priority)
+
+        // 대답은 멈춤 안내를 끊지 못하고 기다린다. 안전 알림은 멈춤 안내를 끊는다.
+        val b = Rig()
+        b.startAndDepart()
+        b.clear()
+        b.set { copy(brakePressed = true) }
+        b.advance(20)
+        assertEquals("stop_signal", b.spoken().single().situation)
+        b.repeat()
+        assertEquals("멈춤 안내 중에는 대답이 기다린다", 1, b.spoken().size)
+        b.set { copy(seatDoorOpen = true) }
+        val door = b.spoken("door_open_p").single()
+        assertTrue("안전 알림은 멈춤 안내를 끊는다", door.interrupt)
+        b.set { copy(seatDoorOpen = false) }
+        b.advance(12)
+        val answer = b.spoken().last()
+        assertEquals(SpeechKind.DRIVER_REQUEST, answer.kind)
+        assertFalse("기다리던 대답은 안전 알림이 끝난 뒤에 끊지 않고 말한다", answer.interrupt)
+    }
+
+    @Test
+    fun `문과 창문이 함께 열려도 안전 알림끼리는 끊지 않고 차례로 말한다`() {
+        val rig = Rig()
+        rig.startAndDepart()
+        rig.clear()
+        rig.set { copy(seatDoorOpen = true, seatWindowOpenPercent = 50) }
+        assertEquals(listOf("door_open_p"), rig.spoken().map { it.situation })
+        assertEquals(2, rig.notices().size)
+        assertTrue("운전자 화면에는 급한 알림(문)이 남는다", rig.snapshot().driverNoticeUrgent)
+        assertEquals(rig.notices().first { it.situation == "door_open_d" }.text, rig.snapshot().driverNotice)
+        rig.advance(12)
+        assertEquals(listOf("door_open_p", "window_open_p"), rig.spoken().map { it.situation })
+        assertFalse(rig.spoken("window_open_p").single().interrupt)
+    }
+
+    @Test
     fun `잠시 조용히를 누르면 하던 말을 멈추고 10분 동안 먼저 말하지 않는다`() {
         val rig = Rig(TripConfig(place = "큰딸 집", interval = IntervalMode.FIVE_MIN))
         rig.startAndDepart()
@@ -573,6 +700,30 @@ class CompanionEngineTest {
         rig.clear()
         rig.ask(PassengerIntent.ARRIVED_Q); rig.advance(12)
         assertEquals("ask_when_near", rig.spoken().single().situation)
+    }
+
+    @Test
+    fun `집으로 가는 길에 집에 가자고 하시면 집에 가고 있다고 말한다`() {
+        for (config in listOf(
+            TripConfig(place = "집", purpose = Purpose.NONE),
+            TripConfig(place = "우리 집", purpose = Purpose.MEAL),
+            TripConfig(place = "큰딸 집", purpose = Purpose.REST),
+        )) {
+            val rig = Rig(config)
+            rig.startAndDepart()
+            rig.clear()
+            rig.ask(PassengerIntent.GO_HOME); rig.advance(12)
+            val line = rig.spoken().single()
+            assertEquals(config.place, "ask_where", line.situation)
+            assertFalse(line.text, line.text.contains("들렀다가") || line.text.contains("들르"))
+        }
+        // 다른 곳에 가는 길이면 마음을 받아 주고, 들렀다가 집에 간다고 말한다
+        val rig = Rig(TripConfig(place = "병원", purpose = Purpose.CLINIC))
+        rig.startAndDepart()
+        rig.clear()
+        rig.ask(PassengerIntent.GO_HOME); rig.advance(12)
+        assertEquals("ask_gohome", rig.spoken().single().situation)
+        assertTrue(rig.spoken().single().text.contains("집에 가요"))
     }
 
     @Test

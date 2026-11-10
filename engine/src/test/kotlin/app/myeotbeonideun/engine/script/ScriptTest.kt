@@ -176,8 +176,9 @@ class ScriptValidatorTest {
     @Test
     fun `R2 한 줄은 두 문장까지이고 화제 전환은 한 문장이다`() {
         assertEquals(listOf("R2"), errors("x", Audience.PASSENGER, "{호칭}, 가요. 곧 가요. 잘 가요."))
-        assertEquals(listOf("R2"), errors("redirect_meal", Audience.PASSENGER, "가서 드세요. 맛있어요."))
-        assertTrue(errors("redirect_meal", Audience.PASSENGER, "가서 같이 드세요.").isEmpty())
+        assertEquals(listOf("R2"), errors("redirect_meal", Audience.PASSENGER, "{호칭}, 가서 드세요. 맛있어요."))
+        assertTrue(errors("redirect_meal", Audience.PASSENGER, "{호칭}, 가서 같이 드세요.").isEmpty())
+        assertEquals("화제 전환 줄도 호칭으로 시작한다", listOf("R1"), errors("redirect_meal", Audience.PASSENGER, "가서 같이 드세요."))
     }
 
     @Test

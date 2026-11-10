@@ -201,7 +201,8 @@ class ScreenshotTest {
     @Test
     fun `09 동행 중 - 도착`() = shot("09_companion_arrived", drivingShell.copy(restricted = false)) {
         Companion(
-            halfway().nav { copy(remainSec = 30, remainMeters = 80) }.wait(8).set { copy(gear = Gear.PARK) }
+            // 앞의 말이 끝나고 잠깐 쉰 뒤에 도착 안내가 나오므로 몇 초 기다렸다가 그린다
+            halfway().nav { copy(remainSec = 30, remainMeters = 80) }.wait(8).set { copy(gear = Gear.PARK) }.wait(3)
                 .ui("도착", restricted = false),
         )
     }
