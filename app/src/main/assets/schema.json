@@ -1,0 +1,57 @@
+{
+  "packageName": "app.myeotbeonideun",
+  "appDescription": "A ride companion that tells a passenger where the car is going and how far along the trip is, as many times as needed, so the driver can keep driving.",
+  "invokeWord": "몇 번이든",
+  "version": "1.0.0",
+  "actionCalls": [
+    {
+      "type": "function",
+      "function": {
+        "name": "REPEAT_TRIP_ANSWER",
+        "description": "Tell the passenger again, by voice, where the car is going and how far along the trip is.",
+        "parameters": {
+          "type": "object",
+          "properties": {},
+          "required": []
+        },
+        "component": "service"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "PAUSE_VOICE_GUIDE",
+        "description": "Pause the voice guidance for the passenger for a while. Safety notices are still given.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "minutes": {
+              "type": "number",
+              "description": "How many minutes to stay quiet. Ten minutes when not given."
+            }
+          },
+          "required": []
+        },
+        "component": "service"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "START_COMPANION_TRIP",
+        "description": "Start the ride companion for the passenger using a saved frequent trip.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "destinationName": {
+              "type": "string",
+              "description": "Name of the saved destination to use. The most recently used trip when not given."
+            }
+          },
+          "required": []
+        },
+        "component": "activity"
+      }
+    }
+  ]
+}

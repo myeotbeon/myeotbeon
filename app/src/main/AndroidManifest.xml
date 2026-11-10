@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-feature
+        android:name="android.hardware.type.automotive"
+        android:required="true" />
+
+    <!--
+        권한은 읽기(조회)뿐이다. 차량 제어(CONTROL_CAR_*), 경고등(PRIVATE_CAR_SAFETY), 인터넷은 선언하지 않는다.
+        각 권한이 어느 기능에 쓰이는지는 docs/signals.md 에 적었다.
+    -->
+    <!-- Pleos Vehicle SDK: 좌석 점유·안전띠 / 문 / 창문 / 브레이크 페달 -->
+    <uses-permission android:name="pleos.car.permission.CAR_SEATS" />
+    <uses-permission android:name="pleos.car.permission.CAR_DOORS" />
+    <uses-permission android:name="pleos.car.permission.CAR_WINDOWS" />
+    <uses-permission android:name="pleos.car.permission.CAR_DRIVE" />
+    <!-- Pleos NaviHelper: 목적지 이름·남은 시간·도착 이벤트 -->
+    <uses-permission android:name="pleos.car.permission.NAVI_ROUTE" />
+    <!-- Pleos FusedLocation: 내비 없이 가는 길의 도착 근접 알림(사용자가 켰을 때만 요청) -->
+    <uses-permission android:name="pleos.car.permission.FUSED_LOCATION" />
+    <!-- Pleos TextToSpeech / SpeechToText(기기 안 엔진) -->
+    <uses-permission android:name="pleos.car.permission.TTS_SERVICE" />
+    <uses-permission android:name="pleos.car.permission.STT_SERVICE" />
+    <!-- AAOS Car API: 변속단(GEAR_SELECTION), 속도(PERF_VEHICLE_SPEED) -->
+    <uses-permission android:name="android.car.permission.CAR_POWERTRAIN" />
+    <uses-permission android:name="android.car.permission.CAR_SPEED" />
+    <!-- 주행 중 안내를 이어 가는 포그라운드 서비스 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+
+    <!-- Pleos TTS 를 쓸 수 없을 때 안드로이드 기본 TTS 엔진을 찾기 위한 선언 -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+    </queries>
+
+    <application
+        android:name=".App"
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.Myeotbeon">
+
+        <!--
+            주행 중에도 쓰는 화면(동행 중·동승자 카드)이 있어 주행 중 사용 가능(DO) 화면으로 선언한다.
+            앱은 CarUxRestrictions 를 받아 주행 규제 중에는 설정·기록 화면을 잠근다(Pleos 주행 규제 개발 가이드).
+        -->
+        <activity
+            android:name=".ui.MainActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:resizeableActivity="true"
+            android:windowSoftInputMode="adjustResize">
+            <meta-data
+                android:name="distractionOptimized"
+                android:value="true" />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- Gleo: "동행 시작" (화면이 필요한 기능이라 component = activity) -->
+            <intent-filter>
+                <action android:name="START_COMPANION_TRIP" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <service
+            android:name=".service.CompanionService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
+
+        <!-- Gleo: "다시 말씀드리기", "잠시 조용히" (화면 없이 처리, component = service → 브로드캐스트) -->
+        <receiver
+            android:name=".gleo.GleoActionReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="REPEAT_TRIP_ANSWER" />
+                <action android:name="PAUSE_VOICE_GUIDE" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>

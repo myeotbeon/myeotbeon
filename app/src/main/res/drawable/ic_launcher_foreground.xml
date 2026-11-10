@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 말풍선과 세 점: 같은 대답을 몇 번이든 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#F0CB85"
+        android:pathData="M40,33h28a10,10 0,0 1,10 10v16a10,10 0,0 1,-10 10h-15l-11,9v-9h-2a10,10 0,0 1,-10 -10v-16a10,10 0,0 1,10 -10z" />
+    <path
+        android:fillColor="#17303A"
+        android:pathData="M40.5,51a3.5,3.5 0,1 0,7 0a3.5,3.5 0,1 0,-7 0zM50.5,51a3.5,3.5 0,1 0,7 0a3.5,3.5 0,1 0,-7 0zM60.5,51a3.5,3.5 0,1 0,7 0a3.5,3.5 0,1 0,-7 0z" />
+</vector>
