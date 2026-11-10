@@ -472,13 +472,27 @@ class CompanionEngine(
     private fun isRedirectEligible(situation: String): Boolean =
         situation.startsWith("ask_") || situation.startsWith("stage_")
 
+    /**
+     * 동승자 카드 둘째 줄. 대본의 카드 문구는 두 가지 꼴을 모두 받는다.
+     * - 구간별 상황: card_stage_depart · onway · half · near · (5min) · arrive, 그리고 서 있을 때의 card_stop,
+     *   운전자가 내려 있을 때의 card_driver_away
+     * - 한 상황에 구간 순서대로 6줄: card_stage
+     * 변형이 여럿이어도 첫째 것만 쓴다(한 번의 이동에서 카드의 말투가 바뀌지 않게).
+     */
     private fun cardStageLine(): String {
-        // 대본의 card_stage 가 구간 수만큼 있으면 구간 순서대로 쓴다. 아니면 기본 문구.
-        return if (script.count("card_stage") == Stage.entries.size) {
-            script.at("card_stage", stage.ordinal) ?: stage.cardLabel
-        } else {
-            stage.cardLabel
+        if (phase != Phase.ARRIVED) {
+            val stopCard = when (stopReason) {
+                StopReason.DRIVER_AWAY -> "card_driver_away"
+                StopReason.SIGNAL_WAIT, StopReason.TRAFFIC, StopReason.WAYPOINT_STOP -> "card_stop"
+                else -> null
+            }
+            stopCard?.let { script.at(it, 0) }?.let { return it }
         }
+        stage.cardSituations.firstNotNullOfOrNull { script.at(it, 0) }?.let { return it }
+        if (script.count("card_stage") == Stage.entries.size) {
+            script.at("card_stage", stage.ordinal)?.let { return it }
+        }
+        return stage.cardLabel
     }
 
     // ───────────────────────── 말하기 통로와 우선순위 ─────────────────────────

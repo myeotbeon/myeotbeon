@@ -34,6 +34,9 @@ object ScriptValidator {
     /** 카드 줄은 12자 안팎. 공백을 뺀 글자 수의 상한. */
     const val MAX_CARD_CHARS = 16
 
+    /** card_stage 한 상황에 담을 때의 줄 수(구간 수). */
+    const val CARD_STAGE_LINES = 6
+
     /** 명세 3.6 R3 의 금지어. '아니에요'는 문장 처음에 올 때만 금지라 따로 본다. */
     val FORBIDDEN: List<String> = listOf(
         "아까", "또", "다시 말", "말했", "말씀드렸", "기억", "몇 번", "왜 자꾸", "잊", "모르", "틀렸",
@@ -46,8 +49,21 @@ object ScriptValidator {
     /** 화면과 말 어디에도 쓰지 않는 말. */
     val DIGNITY: List<String> = listOf("치매", "환자", "인지저하", "인지 저하", "인지장애", "인지 장애")
 
-    /** 한 가지 변형만 있어도 되는 상황. */
-    private val SINGLE_VARIANT_OK = setOf("intro", "card_title", "card_stage")
+    /** 한 가지 변형만 있어도 되는 상황. 카드(card_*)도 하나면 된다. */
+    private val SINGLE_VARIANT_OK = setOf("intro")
+
+    private fun singleVariantOk(key: String) = key in SINGLE_VARIANT_OK || key.startsWith("card_")
+
+    /**
+     * 동승자 카드 둘째 줄은 두 가지 꼴 가운데 하나면 된다:
+     * 한 상황(card_stage)에 구간 순서대로 6줄, 또는 구간별 상황(card_stage_depart 등).
+     */
+    val CARD_STAGE_KEYS = listOf(
+        "card_stage_depart", "card_stage_onway", "card_stage_half", "card_stage_near", "card_stage_arrive",
+    )
+
+    /** 있어도 되고 없어도 되는 카드 상황. */
+    val OPTIONAL_CARD_KEYS = setOf("card_stage", "card_stage_5min", "card_stop", "card_driver_away")
 
     /** 명세 9절의 상황 목록(10절에 따라 redirect 는 목적별 네 개로 바뀜). */
     val REQUIRED: Map<String, Audience> = linkedMapOf(
@@ -79,7 +95,6 @@ object ScriptValidator {
         "redirect_family" to Audience.PASSENGER,
         "redirect_rest" to Audience.PASSENGER,
         "card_title" to Audience.CARD,
-        "card_stage" to Audience.CARD,
     )
 
     private val SENTENCE_END = Regex("""[.!?…。]+""")
@@ -119,9 +134,27 @@ object ScriptValidator {
                 out += Finding(Severity.ERROR, "F-대상", key, -1, "to 는 ${to.id} 여야 합니다(지금 ${s.to.id})")
             }
         }
+        // 카드 둘째 줄: card_stage(6줄) 또는 구간별 상황 가운데 하나는 있어야 한다.
+        val perStage = CARD_STAGE_KEYS.all { book.situation(it) != null }
+        val single = book.situation("card_stage")
+        if (!perStage && single == null) {
+            out += Finding(
+                Severity.ERROR, "F-상황", "card_stage", -1,
+                "카드 구간 문구가 없습니다(card_stage 또는 card_stage_depart 등)",
+            )
+        }
+        if (!perStage && single != null && single.lines.size != CARD_STAGE_LINES) {
+            out += Finding(
+                Severity.ERROR, "F-카드", "card_stage", -1,
+                "구간 순서대로 ${CARD_STAGE_LINES}줄이어야 합니다(지금 ${single.lines.size}줄)",
+            )
+        }
         for (s in book.situations.values) {
-            if (s.key !in REQUIRED) {
+            val known = s.key in REQUIRED || s.key in CARD_STAGE_KEYS || s.key in OPTIONAL_CARD_KEYS
+            if (!known) {
                 out += Finding(Severity.WARNING, "F-상황", s.key, -1, "명세에 없는 상황입니다")
+            } else if (s.key.startsWith("card_") && s.to != Audience.CARD) {
+                out += Finding(Severity.ERROR, "F-대상", s.key, -1, "to 는 card 여야 합니다(지금 ${s.to.id})")
             }
             out += validateSituation(s, sample)
         }
@@ -130,10 +163,10 @@ object ScriptValidator {
 
     fun validateSituation(s: Situation, sample: SlotValues = SlotValues.SAMPLE): List<Finding> {
         val out = ArrayList<Finding>()
-        val min = if (s.key in SINGLE_VARIANT_OK) 1 else 2
+        val min = if (singleVariantOk(s.key)) 1 else 2
         if (s.lines.size < min) {
             out += Finding(Severity.ERROR, "R4", s.key, -1, "변형이 ${s.lines.size}개입니다(최소 ${min}개)")
-        } else if (s.lines.size < 3 && s.key !in SINGLE_VARIANT_OK) {
+        } else if (s.lines.size < 3 && !singleVariantOk(s.key)) {
             out += Finding(Severity.WARNING, "R4", s.key, -1, "변형이 ${s.lines.size}개입니다(권장 3~4개)")
         }
         val rendered = s.lines.map { ScriptEngine.render(it, sample) }

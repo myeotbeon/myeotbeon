@@ -6,7 +6,7 @@
 ## 지금 상태 (2026-11-10)
 
 - `./gradlew testDebugUnitTest assembleDebug assembleRelease` 통과.
-- 단위 테스트 147개 통과(엔진 105, 앱 42). lint 는 오류 없음(경고는 의존성 최신 버전 안내 7건과 리소스 폴더 버전 표기 1건).
+- 단위 테스트 149개 통과(엔진 107, 앱 42). lint 는 오류 없음(경고는 의존성 최신 버전 안내 7건과 리소스 폴더 버전 표기 1건).
 - 화면 그림 17장을 `docs/screens/` 에 뽑음(Roborazzi).
 - **에뮬레이터·기기에서 실행해 보지 못했음.** 개발 PC 에 에뮬레이터 가속이 없어서다. Pleos API 는 문서 시그니처와 컴파일로 맞췄고,
   앱 흐름은 Robolectric(`AppFlowTest`)으로 체험 모드 신호를 넣어 출발~도착~기록까지 확인했다.
@@ -65,7 +65,7 @@
 - Gleo: `assets/schema.json`(함수 3개), 브로드캐스트 수신(`GleoActionReceiver`), 액티비티 수신(`START_COMPANION_TRIP`), 응답 브로드캐스트.
 
 ### 6. 테스트와 화면 그림
-- 엔진 105개, 앱 42개. `ScreenshotTest` 는 실제 엔진을 돌려 얻은 문장으로 화면을 그린다.
+- 엔진 107개, 앱 42개. `ScreenshotTest` 는 실제 엔진을 돌려 얻은 문장으로 화면을 그린다.
 - 화면 크기는 Pleos Connect 창 크기(가로 1700x1212, 세로 840x1212, 160dpi)로 잡았다.
 
 ## 문서·명세와 실제가 달랐던 점
@@ -83,8 +83,13 @@
 ## 남은 일
 
 ### 통합 단계에서
-- [ ] 대본 완성본을 `app/src/main/assets/scripts_ko.json` 에 복사 → `./gradlew :engine:test` 로 검사기 통과 확인.
-      실패하면 위반한 상황·줄 번호·규칙이 메시지에 나온다. `card_stage` 는 구간 순서대로 6줄이어야 구간별로 쓰인다(아니면 기본 문구).
+- [ ] 대본 완성본을 `app/src/main/assets/scripts_ko.json` 에 복사 → `./gradlew testDebugUnitTest` 로 확인.
+      - 2026-11-10 12시 반 기준 대본 담당의 `scripts_ko.json`(35개 상황, 118문장)을 미리 돌려 봤다:
+        `:engine:validateScript -Pfile=…` 오류 0건(주의 3건: 운전자 줄 변형이 2개), `:engine:test -PscriptFile=…` 107개 모두 통과.
+        그 대본이 카드 문구를 구간별 상황(`card_stage_depart` 등, `card_stop`, `card_driver_away`)으로 쓰고 있어
+        엔진과 검사기가 그 꼴도 받게 고쳤다. 그러므로 **파일만 복사하면 된다.**
+      - 대본 담당의 검사기(`lint_scripts.py`)는 낱말 규칙이 더 엄격하다(구간·안내·목적지 같은 말 금지 등). 앱의 검사기는 명세 3.6·10절까지만 본다.
+      - 앱 테스트 가운데 화면의 글자를 그대로 견주는 것(`MainActivityTest` 의 "큰딸 집")은 체험 모드의 목적지 이름이라 대본과 무관하다.
 - [ ] 대본을 바꾼 뒤 화면 그림 다시 뽑기(`-Proborazzi.test.record=true`).
 - [ ] 제출용 APK 를 `apk/<팀명>_몇번이든_release.apk` 로 복사(`.gitignore` 가 `apk/*.apk` 는 허용).
 - [ ] 저장소 묶음(`git bundle`)으로 넘겼으므로 원격은 아직 없다. 올릴 때 커밋 작성자는 이미 `myeotbeon-dev` 로 되어 있다.

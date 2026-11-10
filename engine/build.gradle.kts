@@ -13,8 +13,20 @@ dependencies {
 
 tasks.test {
     useJUnit()
+    // -PscriptFile=<대본 파일> 을 주면 그 대본으로 엔진 테스트를 돌린다(새 대본을 넣기 전의 확인용).
+    systemProperty("scriptFile", (project.findProperty("scriptFile") as String?) ?: "")
     testLogging {
         events("failed")
         showStandardStreams = false
     }
+}
+
+// 대본 검사 도구: ./gradlew :engine:validateScript [-Pfile=<대본 파일>]
+tasks.register<JavaExec>("validateScript") {
+    group = "verification"
+    description = "대본 파일(scripts_ko.json)이 말의 원칙을 지키는지 검사한다"
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("app.myeotbeonideun.engine.script.ValidateScriptKt")
+    workingDir = projectDir
+    args((project.findProperty("file") as String?) ?: "../app/src/main/assets/scripts_ko.json")
 }

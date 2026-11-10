@@ -8,6 +8,9 @@ import app.myeotbeonideun.engine.model.NavState
 import app.myeotbeonideun.engine.model.Purpose
 import app.myeotbeonideun.engine.model.Signals
 import app.myeotbeonideun.engine.model.TripConfig
+import app.myeotbeonideun.engine.script.Audience
+import app.myeotbeonideun.engine.script.ScriptBook
+import app.myeotbeonideun.engine.script.Situation
 import app.myeotbeonideun.engine.script.ScriptValidator
 import app.myeotbeonideun.engine.stop.StopReason
 import org.junit.Assert.assertEquals
@@ -370,7 +373,7 @@ class CompanionEngineTest {
         assertEquals("arrive", arrive.situation)
         assertTrue(arrive.text.contains("큰딸 집"))
         assertEquals(Phase.ARRIVED, rig.snapshot().phase)
-        assertEquals("다 왔어요", rig.snapshot().cardStage)
+        assertTrue(rig.snapshot().cardStage, rig.snapshot().cardStage.contains("다 왔어요"))
         rig.clear()
         rig.set { copy(driverDoorOpen = true, driverSeatOccupied = false) }
         rig.advance(15 * 60)
@@ -645,6 +648,59 @@ class CompanionEngineTest {
             assertFalse(line.text, line.text.contains("{"))
         }
         assertTrue(rig.spoken().any { it.text.contains("사위가") })
+    }
+
+    @Test
+    fun `카드 문구가 구간별 상황으로 온 대본도 쓰고 서 있을 때는 그 사실을 보인다`() {
+        fun card(key: String, line: String) = key to Situation(key, Audience.CARD, listOf(line, "$line(둘째 꼴)"))
+        val base = TestScripts.book.situations.filterKeys {
+            !it.startsWith("card_stage") && it != "card_stop" && it != "card_driver_away"
+        }
+        val book = ScriptBook(
+            1,
+            base + listOf(
+                card("card_stage_depart", "이제 출발해요"), card("card_stage_onway", "잘 가고 있어요"),
+                card("card_stage_half", "절반쯤 왔어요"), card("card_stage_near", "거의 다 왔어요"),
+                card("card_stage_arrive", "{곳}에 다 왔어요"), card("card_stop", "잠깐 멈췄어요"),
+                card("card_driver_away", "{운전자:이} 곧 와요"),
+            ),
+        )
+        val engine = CompanionEngine(book, TripConfig(place = "큰딸 집"))
+        var now = 0L
+        var s = Signals(
+            gear = Gear.DRIVE, brakePressed = false, driverSeatOccupied = true, driverDoorOpen = false,
+            seatOccupied = true, nav = NavState(guiding = true, totalSec = 2400, remainSec = 2400),
+        )
+        fun set(change: Signals.() -> Signals) {
+            s = s.change()
+            engine.onSignals(s, now)
+        }
+        fun wait(sec: Int) = repeat(sec) {
+            now += 1000
+            engine.onTick(now)
+        }
+        fun cardLine() = engine.snapshot(now).cardStage
+
+        engine.start(now)
+        set { this }
+        assertEquals("이제 출발해요", cardLine())
+        set { copy(nav = nav.copy(remainSec = 1400)) }
+        assertEquals("절반쯤 왔어요", cardLine())
+        set { copy(brakePressed = true) }
+        wait(21)
+        assertEquals("잠깐 멈췄어요", cardLine())
+        set { copy(brakePressed = false) }
+        assertEquals("절반쯤 왔어요", cardLine())
+        set { copy(nav = nav.copy(remainSec = 200)) } // 곧 도착: 따로 없으면 '거의 다 옴' 카드를 쓴다
+        assertEquals("거의 다 왔어요", cardLine())
+        set { copy(gear = Gear.PARK, nav = nav.copy(remainSec = 900)) }
+        set { copy(driverDoorOpen = true, driverSeatOccupied = false) }
+        assertEquals("따님이 곧 와요", cardLine())
+        set { copy(driverSeatOccupied = true, driverDoorOpen = false) }
+        wait(3)
+        set { copy(gear = Gear.DRIVE, nav = nav.copy(remainSec = 30)) }
+        set { copy(gear = Gear.PARK) }
+        assertEquals("큰딸 집에 다 왔어요", cardLine())
     }
 
     @Test

@@ -151,9 +151,11 @@ Pleos 서비스가 없는 기기에서도 같은 엔진을 모의 신호로 돌�
 ```bash
 ./gradlew testDebugUnitTest                              # 전체
 ./gradlew :app:testDebugUnitTest -Proborazzi.test.record=true   # 화면 그림을 docs/screens 에 다시 뽑기
+./gradlew :engine:validateScript                         # 대본이 말의 원칙을 지키는지 검사(-Pfile=<대본 파일>)
+./gradlew :engine:test -PscriptFile=<대본 파일>            # 다른 대본으로 엔진 테스트 전체를 돌려 보기
 ```
 
-- **엔진(순수 Kotlin, 105개)**: 구간 경계, 간격 계산, 쿨다운, 멈춤 이유 분류의 각 경우, 운전자 이탈·복귀, 조사 처리,
+- **엔진(순수 Kotlin, 107개)**: 구간 경계, 간격 계산, 쿨다운, 멈춤 이유 분류의 각 경우, 운전자 이탈·복귀, 조사 처리,
   대본 선택의 결정성, 전체 대본의 규칙 검사, 금지어 검출, 우선순위와 '잠시 조용히'.
 - **앱(42개)**: 색 대비 4.5:1, 화면 글 검사, 저장소, Gleo 스키마·응답, 실제 Application 으로 출발~도착~기록 흐름,
   화면 그림 17장.

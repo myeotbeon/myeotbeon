@@ -4,15 +4,16 @@ package app.myeotbeonideun.engine.journey
  * 여정의 구간. 시간은 분 숫자가 아니라 구간 말로 전한다(명세 3.2).
  *
  * @property situation 이 구간에 들어설 때 쓰는 대본 상황 이름
- * @property cardLabel 동승자 카드 둘째 줄의 기본 문구(대본에 card_stage 가 6줄이면 그것을 쓴다)
+ * @property cardSituations 동승자 카드 둘째 줄을 찾는 대본 상황 이름(앞의 것부터 찾는다)
+ * @property cardLabel 대본에 카드 문구가 없을 때 쓰는 기본 문구
  */
-enum class Stage(val situation: String, val cardLabel: String) {
-    JUST_DEPARTED("depart", "이제 출발해요"),
-    ON_WAY("stage_onway", "가는 중이에요"),
-    HALF("stage_half", "절반쯤 왔어요"),
-    NEAR("stage_near", "거의 다 왔어요"),
-    SOON("stage_5min", "곧 도착해요"),
-    ARRIVED("arrive", "다 왔어요"),
+enum class Stage(val situation: String, val cardSituations: List<String>, val cardLabel: String) {
+    JUST_DEPARTED("depart", listOf("card_stage_depart"), "이제 출발해요"),
+    ON_WAY("stage_onway", listOf("card_stage_onway"), "가는 중이에요"),
+    HALF("stage_half", listOf("card_stage_half"), "절반쯤 왔어요"),
+    NEAR("stage_near", listOf("card_stage_near"), "거의 다 왔어요"),
+    SOON("stage_5min", listOf("card_stage_5min", "card_stage_near"), "곧 도착해요"),
+    ARRIVED("arrive", listOf("card_stage_arrive"), "다 왔어요"),
 }
 
 /**

@@ -156,7 +156,7 @@ class ScriptValidatorTest {
         for (key in ScriptValidator.REQUIRED.keys) {
             val s = TestScripts.book.situation(key)
             assertTrue("$key 없음", s != null)
-            if (key != "card_title") assertTrue("$key 변형 수", s!!.lines.size >= 2)
+            if (!key.startsWith("card_")) assertTrue("$key 변형 수", s!!.lines.size >= 2)
         }
     }
 
@@ -243,6 +243,35 @@ class ScriptValidatorTest {
     fun `빠진 상황을 알려 준다`() {
         val book = ScriptBook(1, mapOf("intro" to TestScripts.book.situation("intro")!!))
         val missing = ScriptValidator.validate(book).filter { it.rule == "F-상황" && it.severity == Severity.ERROR }
-        assertEquals(ScriptValidator.REQUIRED.size - 1, missing.size)
+        // 필수 상황 가운데 intro 만 있고, 카드 구간 문구도 없다
+        assertEquals(ScriptValidator.REQUIRED.size - 1 + 1, missing.size)
+    }
+
+    private fun card(key: String, vararg lines: String) = key to Situation(key, Audience.CARD, lines.toList())
+
+    private fun bookWithCards(vararg cards: Pair<String, Situation>): ScriptBook {
+        val base = TestScripts.book.situations.filterKeys {
+            !it.startsWith("card_stage") && it != "card_stop" && it != "card_driver_away"
+        }
+        return ScriptBook(1, base + cards)
+    }
+
+    @Test
+    fun `카드 구간 문구는 한 상황에 6줄이어도 되고 구간별 상황이어도 된다`() {
+        fun errors(book: ScriptBook) = ScriptValidator.validate(book).filter { it.severity == Severity.ERROR }
+        val single = bookWithCards(card("card_stage", "출발", "가는 중", "절반", "거의", "곧", "도착"))
+        assertTrue(errors(single).toString(), errors(single).isEmpty())
+
+        val perStage = bookWithCards(
+            card("card_stage_depart", "이제 출발해요"), card("card_stage_onway", "잘 가고 있어요"),
+            card("card_stage_half", "절반쯤 왔어요"), card("card_stage_near", "거의 다 왔어요"),
+            card("card_stage_arrive", "{곳}에 다 왔어요"), card("card_stop", "잠깐 멈췄어요"),
+            card("card_driver_away", "{운전자:이} 곧 와요"),
+        )
+        assertTrue(errors(perStage).toString(), errors(perStage).isEmpty())
+        assertTrue(ScriptValidator.validate(perStage).none { it.rule == "F-상황" })
+
+        assertEquals(listOf("F-상황"), errors(bookWithCards()).map { it.rule })
+        assertEquals(listOf("F-카드"), errors(bookWithCards(card("card_stage", "출발", "도착"))).map { it.rule })
     }
 }
