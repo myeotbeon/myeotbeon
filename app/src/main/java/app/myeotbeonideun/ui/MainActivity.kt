@@ -2,6 +2,7 @@ package app.myeotbeonideun.ui
 
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.pm.PermissionInfo
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -43,9 +44,16 @@ class MainActivity : ComponentActivity() {
             vm.onSpeedPermissionResult(granted)
         }
 
+    /** 음성 권한이 '사용자 허용'이 필요한 종류인 차에서만 묻는다. 결과와 상관없이 앱은 동작한다. */
+    private val speechPermissions =
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
+            if (result.values.any { it }) (application as App).container.speech.warmUp()
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         (application as App).container.speech.warmUp()
+        requestSpeechPermissionsIfNeeded()
         handleGleo(intent)
         setContent {
             MyeotbeonTheme {
@@ -70,6 +78,20 @@ class MainActivity : ComponentActivity() {
         val started = Gleo.handleStart(this, container, GleoParams.parse(intent.getStringExtra(Gleo.EXTRA_PARAM)))
         vm.navigate(if (started) Screen.COMPANION else Screen.SETUP)
         intent.action = null // 화면을 다시 만들 때 또 시작하지 않게
+    }
+
+    /**
+     * Pleos TTS·STT 권한의 보호 수준은 문서에 없다. 설치할 때 주어지는 종류면 아무것도 묻지 않고,
+     * 사용자 허용이 필요한 종류(dangerous)로 정의된 차에서만 한 번 묻는다.
+     */
+    private fun requestSpeechPermissionsIfNeeded() {
+        val needed = listOf("pleos.car.permission.TTS_SERVICE", "pleos.car.permission.STT_SERVICE").filter { name ->
+            val dangerous = runCatching {
+                packageManager.getPermissionInfo(name, 0).protection == PermissionInfo.PROTECTION_DANGEROUS
+            }.getOrDefault(false)
+            dangerous && checkSelfPermission(name) != PackageManager.PERMISSION_GRANTED
+        }
+        if (needed.isNotEmpty()) speechPermissions.launch(needed.toTypedArray())
     }
 
     /** '도착 지점 기억'을 켤 때만 위치 권한을 묻는다. */
