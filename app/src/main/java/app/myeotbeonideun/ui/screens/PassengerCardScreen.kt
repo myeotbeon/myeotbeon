@@ -43,7 +43,7 @@ fun PassengerCardScreen(title: String?, stage: String?, modifier: Modifier = Mod
                 val density = LocalDensity.current
                 Text(
                     title,
-                    fontSize = fitFontSize(title, width.value, density.fontScale, max = 84f),
+                    fontSize = fitFontSize(title, width.value, density.fontScale, max = 150f),
                     fontWeight = FontWeight.Bold,
                     color = colors.text,
                     textAlign = TextAlign.Center,
@@ -51,7 +51,7 @@ fun PassengerCardScreen(title: String?, stage: String?, modifier: Modifier = Mod
                 )
                 Text(
                     stage,
-                    fontSize = fitFontSize(stage, width.value, density.fontScale, max = 104f),
+                    fontSize = fitFontSize(stage, width.value, density.fontScale, max = 190f),
                     fontWeight = FontWeight.Bold,
                     color = colors.accent,
                     textAlign = TextAlign.Center,

@@ -1,10 +1,12 @@
 package app.myeotbeonideun.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -98,8 +100,10 @@ data class SetupUi(
 /**
  * 출발 전 10초 설정(명세 3.1). 정차 중에만 열린다 — 주행 규제 중에는 이 화면 대신 잠금 안내가 보인다.
  * 고르는 것 위주이고, 글자 입력은 '가는 곳'과 '직접 입력'뿐이다.
+ *
+ * '동행 시작' 버튼은 스크롤하지 않아도 항상 보인다:
+ * 넓은 창에서는 왼쪽(자주 가는 길·시작)과 오른쪽(고르는 것) 두 칸, 좁은 창에서는 아래에 고정.
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SetupScreen(
     ui: SetupUi,
@@ -110,128 +114,183 @@ fun SetupScreen(
     modifier: Modifier = Modifier,
 ) {
     val colors = LocalAppColors.current
-    val form = ui.form
-    Column(
-        modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 36.dp, vertical = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp),
-    ) {
-        Text(stringResource(R.string.setup_title), style = AppType.title, color = colors.text)
+    BoxWithConstraints(modifier.fillMaxSize().padding(horizontal = 36.dp, vertical = 24.dp)) {
+        if (maxWidth >= 1100.dp) {
+            Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(28.dp)) {
+                Column(Modifier.weight(0.85f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+                    Text(stringResource(R.string.setup_title), style = AppType.title, color = colors.text)
+                    Column(
+                        Modifier.weight(1f).verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(18.dp),
+                    ) {
+                        RoutesPanel(ui, onForm, onStartRoute, onDeleteRoute)
+                    }
+                    StartBlock(ui, onStart)
+                }
+                Column(
+                    Modifier.weight(1.25f).fillMaxHeight().verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(18.dp),
+                ) {
+                    WhoWherePanel(ui.form, onForm)
+                    DriverSeatPanel(ui, onForm)
+                }
+            }
+        } else {
+            Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Column(
+                    Modifier.weight(1f).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(18.dp),
+                ) {
+                    Text(stringResource(R.string.setup_title), style = AppType.title, color = colors.text)
+                    RoutesPanel(ui, onForm, onStartRoute, onDeleteRoute)
+                    WhoWherePanel(ui.form, onForm)
+                    DriverSeatPanel(ui, onForm)
+                }
+                StartBlock(ui, onStart)
+            }
+        }
+    }
+}
 
-        if (ui.routes.isNotEmpty()) {
-            Panel {
-                SectionTitle(stringResource(R.string.setup_routes))
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    ui.routes.forEach { route ->
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            BigButton(
-                                text = route.config.place,
-                                caption = stringResource(R.string.setup_route_caption, route.config.honorific),
-                                onClick = { onStartRoute(route) },
-                                minHeight = 96.dp,
-                                textStyle = AppType.title,
-                                modifier = Modifier.widthIn(min = 260.dp),
-                            )
-                            Row {
-                                TextButton(onClick = { onForm(SetupForm.from(route)) }) {
-                                    Text(stringResource(R.string.setup_route_edit), style = AppType.small, color = colors.textSoft)
-                                }
-                                TextButton(onClick = { onDeleteRoute(route) }) {
-                                    Text(stringResource(R.string.setup_route_delete), style = AppType.small, color = colors.textSoft)
-                                }
-                            }
+/** 자주 가는 길: 한 번 눌러 시작한다. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun RoutesPanel(
+    ui: SetupUi,
+    onForm: (SetupForm) -> Unit,
+    onStartRoute: (SavedRoute) -> Unit,
+    onDeleteRoute: (SavedRoute) -> Unit,
+) {
+    val colors = LocalAppColors.current
+    Panel {
+        SectionTitle(stringResource(R.string.setup_routes))
+        if (ui.routes.isEmpty()) {
+            Text(stringResource(R.string.setup_routes_empty), style = AppType.body, color = colors.textSoft)
+        }
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            ui.routes.forEach { route ->
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    BigButton(
+                        text = route.config.place,
+                        caption = stringResource(R.string.setup_route_caption, route.config.honorific),
+                        onClick = { onStartRoute(route) },
+                        minHeight = 100.dp,
+                        textStyle = AppType.title,
+                        modifier = Modifier.widthIn(min = 250.dp),
+                    )
+                    Row {
+                        TextButton(onClick = { onForm(SetupForm.from(route)) }) {
+                            Text(stringResource(R.string.setup_route_edit), style = AppType.small, color = colors.textSoft)
+                        }
+                        TextButton(onClick = { onDeleteRoute(route) }) {
+                            Text(stringResource(R.string.setup_route_delete), style = AppType.small, color = colors.textSoft)
                         }
                     }
                 }
             }
         }
+    }
+}
 
-        Panel {
-            SectionTitle(stringResource(R.string.setup_honorific))
-            ChipRow {
-                SetupForm.HONORIFICS.forEach { h ->
-                    ChoiceChip(h, !form.honorificCustom && form.honorific == h, { onForm(form.copy(honorific = h, honorificCustom = false)) })
-                }
-                ChoiceChip(stringResource(R.string.setup_custom), form.honorificCustom, { onForm(form.copy(honorific = "", honorificCustom = true)) })
+/** 누구를 어디로: 호칭, 가는 곳, 가서 할 일. */
+@Composable
+private fun WhoWherePanel(form: SetupForm, onForm: (SetupForm) -> Unit) {
+    Panel {
+        SectionTitle(stringResource(R.string.setup_honorific))
+        ChipRow {
+            SetupForm.HONORIFICS.forEach { h ->
+                ChoiceChip(h, !form.honorificCustom && form.honorific == h, { onForm(form.copy(honorific = h, honorificCustom = false)) })
             }
-            if (form.honorificCustom) {
-                Field(form.honorific, { onForm(form.copy(honorific = it.take(8))) }, stringResource(R.string.setup_honorific_hint))
-            }
+            ChoiceChip(stringResource(R.string.setup_custom), form.honorificCustom, { onForm(form.copy(honorific = "", honorificCustom = true)) })
+        }
+        if (form.honorificCustom) {
+            Field(form.honorific, { onForm(form.copy(honorific = it.take(8))) }, stringResource(R.string.setup_honorific_hint))
+        }
 
-            SectionTitle(stringResource(R.string.setup_place))
-            Field(form.place, { onForm(form.copy(place = it.take(16))) }, stringResource(R.string.setup_place_hint))
+        SectionTitle(stringResource(R.string.setup_place))
+        Field(form.place, { onForm(form.copy(place = it.take(16))) }, stringResource(R.string.setup_place_hint))
 
-            SectionTitle(stringResource(R.string.setup_purpose))
-            ChipRow {
-                PURPOSES.forEach { (purpose, label) ->
-                    ChoiceChip(stringResource(label), form.purpose == purpose, { onForm(form.copy(purpose = purpose)) })
-                }
+        SectionTitle(stringResource(R.string.setup_purpose))
+        ChipRow {
+            PURPOSES.forEach { (purpose, label) ->
+                ChoiceChip(stringResource(label), form.purpose == purpose, { onForm(form.copy(purpose = purpose)) })
             }
-            if (form.purpose == Purpose.CUSTOM) {
-                Field(form.customPurposeLine, { onForm(form.copy(customPurposeLine = it.take(24))) }, stringResource(R.string.setup_purpose_hint))
+        }
+        if (form.purpose == Purpose.CUSTOM) {
+            Field(form.customPurposeLine, { onForm(form.copy(customPurposeLine = it.take(24))) }, stringResource(R.string.setup_purpose_hint))
+        }
+    }
+}
+
+/** 운전하는 사람, 앉으신 자리, 먼저 말해 주는 간격. */
+@Composable
+private fun DriverSeatPanel(ui: SetupUi, onForm: (SetupForm) -> Unit) {
+    val colors = LocalAppColors.current
+    val form = ui.form
+    Panel {
+        SectionTitle(stringResource(R.string.setup_driver))
+        ChipRow {
+            SetupForm.DRIVERS.forEach { d ->
+                ChoiceChip(d, !form.driverCustom && form.driver == d, { onForm(form.copy(driver = d, driverCustom = false)) })
+            }
+            ChoiceChip(stringResource(R.string.setup_custom), form.driverCustom, { onForm(form.copy(driver = "", driverCustom = true)) })
+        }
+        if (form.driverCustom) {
+            Field(form.driver, { onForm(form.copy(driver = it.take(8))) }, stringResource(R.string.setup_driver_hint))
+        }
+
+        SectionTitle(stringResource(R.string.setup_seat))
+        ChipRow {
+            SeatPosition.PASSENGER_SEATS.forEach { seat ->
+                val occupied = seat in ui.occupiedSeats
+                val label = if (occupied) stringResource(R.string.setup_seat_occupied, seat.label) else seat.label
+                ChoiceChip(label, form.seat == seat, { onForm(form.copy(seat = seat, seatAuto = false)) })
+            }
+        }
+        Text(
+            stringResource(
+                when {
+                    !ui.seatSignalAvailable -> R.string.setup_seat_manual
+                    form.seatAuto && form.seat in ui.occupiedSeats -> R.string.setup_seat_auto
+                    else -> R.string.setup_seat_signal
+                },
+            ),
+            style = AppType.small, color = colors.textSoft,
+        )
+
+        SectionTitle(stringResource(R.string.setup_interval))
+        ChipRow {
+            INTERVALS.forEach { (mode, label) ->
+                ChoiceChip(stringResource(label), form.interval == mode, { onForm(form.copy(interval = mode)) })
             }
         }
 
-        Panel {
-            SectionTitle(stringResource(R.string.setup_driver))
-            ChipRow {
-                SetupForm.DRIVERS.forEach { d ->
-                    ChoiceChip(d, !form.driverCustom && form.driver == d, { onForm(form.copy(driver = d, driverCustom = false)) })
-                }
-                ChoiceChip(stringResource(R.string.setup_custom), form.driverCustom, { onForm(form.copy(driver = "", driverCustom = true)) })
-            }
-            if (form.driverCustom) {
-                Field(form.driver, { onForm(form.copy(driver = it.take(8))) }, stringResource(R.string.setup_driver_hint))
-            }
-
-            SectionTitle(stringResource(R.string.setup_seat))
-            ChipRow {
-                SeatPosition.PASSENGER_SEATS.forEach { seat ->
-                    val occupied = seat in ui.occupiedSeats
-                    val label = if (occupied) stringResource(R.string.setup_seat_occupied, seat.label) else seat.label
-                    ChoiceChip(label, form.seat == seat, { onForm(form.copy(seat = seat, seatAuto = false)) })
-                }
-            }
-            Text(
-                stringResource(
-                    when {
-                        !ui.seatSignalAvailable -> R.string.setup_seat_manual
-                        form.seatAuto && form.seat in ui.occupiedSeats -> R.string.setup_seat_auto
-                        else -> R.string.setup_seat_signal
-                    },
-                ),
-                style = AppType.small, color = colors.textSoft,
-            )
-
-            SectionTitle(stringResource(R.string.setup_interval))
-            ChipRow {
-                INTERVALS.forEach { (mode, label) ->
-                    ChoiceChip(stringResource(label), form.interval == mode, { onForm(form.copy(interval = mode)) })
-                }
-            }
-
-            if (ui.locationAvailable) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Switch(form.rememberArrival, { onForm(form.copy(rememberArrival = it)) })
-                    Column {
-                        Text(stringResource(R.string.setup_remember), style = AppType.body, color = colors.text)
-                        Text(stringResource(R.string.setup_remember_note), style = AppType.small, color = colors.textSoft)
-                    }
+        if (ui.locationAvailable) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                Switch(form.rememberArrival, { onForm(form.copy(rememberArrival = it)) })
+                Column {
+                    Text(stringResource(R.string.setup_remember), style = AppType.body, color = colors.text)
+                    Text(stringResource(R.string.setup_remember_note), style = AppType.small, color = colors.textSoft)
                 }
             }
         }
+    }
+}
 
+/** 차가 처음 할 말의 미리 보기와 '동행 시작' 버튼. */
+@Composable
+private fun StartBlock(ui: SetupUi, onStart: () -> Unit) {
+    val colors = LocalAppColors.current
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         if (ui.preview.isNotEmpty()) {
-            Text(stringResource(R.string.setup_preview, ui.preview), style = AppType.line, color = colors.accent)
+            Text(stringResource(R.string.setup_preview, ui.preview), style = AppType.body, color = colors.accent)
         }
         BigButton(
             text = stringResource(R.string.setup_start),
-            caption = if (form.canStart) null else stringResource(R.string.setup_start_need),
+            caption = if (ui.form.canStart) null else stringResource(R.string.setup_start_need),
             onClick = onStart,
-            enabled = form.canStart,
-            minHeight = 120.dp,
+            enabled = ui.form.canStart,
+            minHeight = 128.dp,
             modifier = Modifier.fillMaxWidth(),
         )
     }

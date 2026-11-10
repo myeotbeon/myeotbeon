@@ -12,7 +12,7 @@
 
     <!-- 동행 중(주행 중에도 쓰는 화면): 세 줄과 큰 버튼 둘 -->
     <string name="companion_who">%1$s · %2$s</string>
-    <string name="companion_where">%1$s · %2$s</string>
+    <string name="companion_stage">" · %1$s"</string>
     <string name="companion_last_line">“%1$s”</string>
     <string name="companion_no_line">아직 안내 전이에요</string>
     <string name="companion_repeat">다시 말씀드리기</string>
@@ -40,6 +40,7 @@
     <!-- 출발 전 설정 -->
     <string name="setup_title">출발 전 10초 설정</string>
     <string name="setup_routes">자주 가는 길 — 한 번 눌러 시작</string>
+    <string name="setup_routes_empty">아직 저장된 길이 없어요. 한 번 다녀오면 여기에 생겨요.</string>
     <string name="setup_route_caption">%1$s · 눌러서 시작</string>
     <string name="setup_route_edit">고치기</string>
     <string name="setup_route_delete">지우기</string>

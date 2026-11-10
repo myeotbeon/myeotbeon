@@ -195,7 +195,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app), DevPanelActions {
         return CompanionUi(
             active = true,
             who = text(R.string.companion_who, trip.config.honorific, trip.config.seat.label),
-            where = text(R.string.companion_where, trip.config.place, stage),
+            place = trip.config.place,
+            stage = stage,
             lastLine = s.lastLine,
             // 통화 등으로 소리를 내지 못했으면 그 사실을 운전자에게 한 줄로 알린다.
             notice = s.driverNotice ?: if (speechSkipped) text(R.string.companion_speech_skipped) else null,

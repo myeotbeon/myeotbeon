@@ -51,7 +51,10 @@ val LocalAppColors = staticCompositionLocalOf { Palette.Night.toColors() }
 
 /**
  * 글자 크기. 차 안에서 1~2초 안에 읽을 수 있게 크게 잡았다.
- * 가장 작은 글자도 20sp 이상이다(가이드의 최소 12sp·18px 보다 넉넉하게).
+ *
+ * Pleos Connect 에뮬레이터 화면은 2560x1440, 160dpi 라 1sp 가 1px 이고, 17인치 화면에서 1px 은 약 0.15mm 다.
+ * 가이드의 글자 높이(중요 정보 5mm, 보조 3mm 이상)에 맞춰 중요 정보는 38sp(약 5.6mm) 이상,
+ * 가장 작은 글자도 22sp(약 3.2mm) 이상으로 두었다.
  */
 object AppType {
     /** 동승자 카드의 큰 글자. */
@@ -62,9 +65,9 @@ object AppType {
     val button = TextStyle(fontSize = 38.sp, lineHeight = 46.sp, fontWeight = FontWeight.Bold)
     val title = TextStyle(fontSize = 34.sp, lineHeight = 42.sp, fontWeight = FontWeight.SemiBold)
     val line = TextStyle(fontSize = 30.sp, lineHeight = 40.sp, fontWeight = FontWeight.Medium)
-    val body = TextStyle(fontSize = 24.sp, lineHeight = 34.sp)
-    val label = TextStyle(fontSize = 22.sp, lineHeight = 28.sp, fontWeight = FontWeight.Medium)
-    val small = TextStyle(fontSize = 20.sp, lineHeight = 26.sp)
+    val body = TextStyle(fontSize = 26.sp, lineHeight = 36.sp)
+    val label = TextStyle(fontSize = 24.sp, lineHeight = 30.sp, fontWeight = FontWeight.Medium)
+    val small = TextStyle(fontSize = 22.sp, lineHeight = 30.sp)
 }
 
 private fun AppColors.toScheme(dark: Boolean): ColorScheme {
