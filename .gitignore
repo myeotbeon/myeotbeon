@@ -1,0 +1,19 @@
+# 기기마다 다른 설정과 비밀 값은 저장소에 올리지 않는다
+local.properties
+keystore.properties
+*.jks
+*.keystore
+
+# 빌드 산출물
+build/
+.gradle/
+.kotlin/
+captures/
+*.apk
+!apk/*.apk
+*.aab
+
+# IDE
+.idea/
+*.iml
+.DS_Store
