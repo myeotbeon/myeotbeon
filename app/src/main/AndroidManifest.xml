@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-feature
         android:name="android.hardware.type.automotive"
@@ -38,6 +39,8 @@
     <application
         android:name=".App"
         android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="false"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:supportsRtl="true"
@@ -73,10 +76,15 @@
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
 
-        <!-- Gleo: "다시 말씀드리기", "잠시 조용히" (화면 없이 처리, component = service → 브로드캐스트) -->
+        <!--
+            Gleo: "다시 말씀드리기", "잠시 조용히" (화면 없이 처리, component = service → 브로드캐스트).
+            Gleo AI 가 어떤 권한으로 보내는지 문서에 없어 수신 권한을 걸지 못했다. 받는 동작은
+            '다시 말하기'와 '잠시 조용히'뿐이고, 동행 중이 아니면 아무 일도 하지 않는다.
+        -->
         <receiver
             android:name=".gleo.GleoActionReceiver"
-            android:exported="true">
+            android:exported="true"
+            tools:ignore="ExportedReceiver">
             <intent-filter>
                 <action android:name="REPEAT_TRIP_ANSWER" />
                 <action android:name="PAUSE_VOICE_GUIDE" />

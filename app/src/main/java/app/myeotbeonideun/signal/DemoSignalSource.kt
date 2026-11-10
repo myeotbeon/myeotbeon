@@ -23,13 +23,14 @@ import kotlinx.coroutines.launch
  * - [playScenario] 는 명세 6절의 시연 순서를 그대로 재생한다.
  * 화면에는 항상 '체험 모드'라고 표시한다(실제 차량 신호가 아님을 밝힌다).
  */
-class DemoSignalSource : SignalSource {
+class DemoSignalSource(private val scope: CoroutineScope) : SignalSource {
 
     private val _state = MutableStateFlow(initialState())
     private val _navEvents = MutableSharedFlow<NavEvent>(extraBufferCapacity = 8)
     private val _status = MutableStateFlow(SourceStatus.IDLE)
     private val _scenarioStep = MutableStateFlow<String?>(null)
     private var scenario: Job? = null
+    private var autoDrive: Job? = null
 
     override val kind = SourceKind.DEMO
     override val status: StateFlow<SourceStatus> = _status.asStateFlow()
@@ -51,7 +52,32 @@ class DemoSignalSource : SignalSource {
 
     override fun stop() {
         stopScenario()
+        setTripActive(false)
         _status.value = SourceStatus.IDLE
+    }
+
+    /**
+     * 동행 중에는 모의 주행을 한다: 주행 단이고 브레이크를 밟지 않았으면 남은 시간이 실제의 4배 빠르기로 줄어든다
+     * (12분 길이 3분). 시연 순서를 재생하는 동안에는 재생 쪽이 값을 정하므로 쉬어 간다.
+     */
+    override fun setTripActive(active: Boolean) {
+        autoDrive?.cancel()
+        autoDrive = null
+        if (!active) return
+        autoDrive = scope.launch {
+            while (true) {
+                delay(1000)
+                if (scenario != null) continue
+                update { v ->
+                    val remain = v.nav.remainSec
+                    if (v.gear != Gear.DRIVE || v.brakePressed == true || remain == null || remain <= 0) v
+                    else {
+                        val next = (remain - AUTO_DRIVE_SPEEDUP).coerceAtLeast(0)
+                        v.copy(nav = v.nav.copy(remainSec = next, remainMeters = next * 8))
+                    }
+                }
+            }
+        }
     }
 
     /** 값을 바꾼다. 주행 규제는 변속단을 따라간다(P단이 아니면 규제 중). */
@@ -85,7 +111,7 @@ class DemoSignalSource : SignalSource {
      * 명세 6절의 시연 순서를 재생한다(약 2분 30초). 동행을 시작한 뒤에 부른다.
      * @param seat 동승자가 앉은 자리
      */
-    fun playScenario(scope: CoroutineScope, seat: SeatPosition) {
+    fun playScenario(seat: SeatPosition) {
         stopScenario()
         scenario = scope.launch {
             suspend fun step(caption: String, holdSec: Int, change: (VehicleState) -> VehicleState = { it }) {
@@ -121,12 +147,15 @@ class DemoSignalSource : SignalSource {
                 it.copy(gear = Gear.PARK, nav = it.nav.copy(remainSec = 20, remainMeters = 50))
             }
             _scenarioStep.value = null
+            scenario = null
         }
     }
 
     companion object {
         const val DEMO_PLACE = "큰딸 집"
         const val DEMO_TOTAL_SEC = 12 * 60
+        /** 모의 주행에서 1초에 줄어드는 남은 시간(초). */
+        const val AUTO_DRIVE_SPEEDUP = 4
 
         fun initialState() = VehicleState(
             gear = Gear.PARK,

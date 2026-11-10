@@ -7,6 +7,7 @@ import android.media.AudioManager
 import android.media.ToneGenerator
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -68,6 +69,8 @@ class SpeechController(
     private val _speaking = MutableStateFlow(false)
     private val _engineName = MutableStateFlow<String?>(null)
     private val _lastSkipped = MutableStateFlow<String?>(null)
+    private val _engineMissing = MutableStateFlow(false)
+    private var lastPrepareFailedAt = 0L
 
     /** 말하는 중이거나 말하려고 기다리는 중이면 true */
     val speaking: StateFlow<Boolean> = _speaking.asStateFlow()
@@ -77,6 +80,9 @@ class SpeechController(
 
     /** 오디오 포커스를 얻지 못해 소리로 내지 못한 마지막 말. */
     val lastSkipped: StateFlow<String?> = _lastSkipped.asStateFlow()
+
+    /** 쓸 수 있는 음성 엔진을 찾지 못했다(화면으로만 알린다). */
+    val engineMissing: StateFlow<Boolean> = _engineMissing.asStateFlow()
 
     /** 음성 엔진을 미리 준비해 첫 말이 늦지 않게 한다. */
     fun warmUp() {
@@ -173,16 +179,25 @@ class SpeechController(
     /** 쓸 수 있는 엔진을 순서대로 찾는다(Pleos → 안드로이드). */
     private suspend fun ensureSpeaker(): Speaker? = prepareLock.withLock {
         active?.let { return@withLock it }
+        // 모두 실패했더라도 얼마 뒤에는 처음부터 다시 찾아본다(부팅 직후에는 엔진이 늦게 뜰 수 있다).
+        if (nextSpeakerIndex >= speakers.size &&
+            SystemClock.elapsedRealtime() - lastPrepareFailedAt >= RETRY_PREPARE_MS
+        ) {
+            nextSpeakerIndex = 0
+        }
         while (nextSpeakerIndex < speakers.size) {
             val candidate = speakers[nextSpeakerIndex++]
             if (candidate.prepare(attributes)) {
                 audioZoneId?.let { candidate.setAudioZone(it) }
                 active = candidate
                 _engineName.value = candidate.name
+                _engineMissing.value = false
                 return@withLock candidate
             }
         }
+        if (!_engineMissing.value) lastPrepareFailedAt = SystemClock.elapsedRealtime()
         _engineName.value = null
+        _engineMissing.value = true
         null
     }
 
@@ -212,6 +227,7 @@ class SpeechController(
         const val SENTENCE_GAP_MS = 350L
         const val FOCUS_ATTEMPTS = 4
         const val FOCUS_RETRY_MS = 1_500L
+        const val RETRY_PREPARE_MS = 60_000L
         const val CHIME_VOLUME = 60
         const val CHIME_MS = 350
     }

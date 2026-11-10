@@ -43,7 +43,7 @@ class AppContainer(private val app: Application) {
     val isAutomotive: Boolean = app.packageManager.hasSystemFeature(PackageManager.FEATURE_AUTOMOTIVE)
 
     val store = AppStore(app)
-    val demoSource = DemoSignalSource()
+    val demoSource = DemoSignalSource(scope)
     val vehicleSource = PleosSignalSource(app)
     val speech = SpeechController(app, scope)
     val listener: PassengerListener = PleosPassengerListener(app)

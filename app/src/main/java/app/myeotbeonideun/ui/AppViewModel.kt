@@ -163,9 +163,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app), DevPanelActions {
     // ───────────────────────── 동행 중 ─────────────────────────
 
     val companion: StateFlow<CompanionUi> =
-        combine(c.trip.ui, c.drivingRestricted, c.speech.lastSkipped) { trip, restricted, skipped ->
+        combine(c.trip.ui, c.drivingRestricted, c.speech.lastSkipped, c.speech.engineMissing) { trip, restricted, skipped, noEngine ->
             if (trip == null) CompanionUi(active = false, restricted = restricted)
-            else companionUi(trip, restricted, skipped != null)
+            else companionUi(trip, restricted, skipped != null, noEngine)
         }.stateIn(viewModelScope, SharingStarted.Eagerly, CompanionUi())
 
     /** 동승자 카드의 두 줄. 동행 중이 아니면 null */
@@ -177,7 +177,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app), DevPanelActions {
     fun toggleQuiet() { c.trip.toggleQuiet() }
     fun endTrip() = c.trip.end()
 
-    private fun companionUi(trip: TripUi, restricted: Boolean, speechSkipped: Boolean): CompanionUi {
+    private fun companionUi(trip: TripUi, restricted: Boolean, speechSkipped: Boolean, noEngine: Boolean): CompanionUi {
         val s = trip.snapshot
         val stage = when {
             s.phase == Phase.READY -> text(R.string.stage_ready)
@@ -198,8 +198,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app), DevPanelActions {
             place = trip.config.place,
             stage = stage,
             lastLine = s.lastLine,
-            // 통화 등으로 소리를 내지 못했으면 그 사실을 운전자에게 한 줄로 알린다.
-            notice = s.driverNotice ?: if (speechSkipped) text(R.string.companion_speech_skipped) else null,
+            // 소리를 내지 못했으면(음성 엔진 없음, 통화 중 등) 그 사실을 운전자에게 한 줄로 알린다.
+            notice = s.driverNotice ?: when {
+                noEngine -> text(R.string.companion_no_engine)
+                speechSkipped -> text(R.string.companion_speech_skipped)
+                else -> null
+            },
             noticeUrgent = s.driverNotice != null && s.driverNoticeUrgent,
             quietMinutesLeft = s.quietUntilMs?.let { ceil((it - trip.nowMs) / 60_000.0).toInt().coerceAtLeast(1) },
             canEnd = !restricted,
@@ -289,7 +293,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app), DevPanelActions {
     override fun emitArrived() { demo?.emitArrived() }
     override fun playScenario() {
         val seat: SeatPosition = c.trip.ui.value?.config?.seat ?: return
-        demo?.playScenario(c.scope, seat)
+        demo?.playScenario(seat)
     }
     override fun stopScenario() { demo?.stopScenario() }
     override fun reset() {

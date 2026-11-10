@@ -25,6 +25,7 @@
     <string name="companion_idle_parked">출발 전 설정에서 동행을 시작하세요</string>
     <string name="companion_idle_driving">차를 세운 뒤 출발 전 설정에서 시작하세요</string>
     <string name="companion_go_setup">출발 전 설정으로</string>
+    <string name="companion_no_engine">음성 엔진이 없어 화면으로만 알려요</string>
     <string name="companion_speech_skipped">통화·안내 중이라 화면으로만 알렸어요</string>
     <string name="stage_ready">출발 전</string>
     <string name="stage_just_departed">방금 출발</string>
