@@ -3,6 +3,7 @@ package app.myeotbeonideun.gleo
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.os.SystemClock
 import app.myeotbeonideun.App
 import app.myeotbeonideun.AppContainer
 import app.myeotbeonideun.data.SavedRoute
@@ -30,9 +31,18 @@ import org.json.JSONObject
  * 받는 쪽 보호의 지금 상태와 한계(결함 18)
  * - 리시버([GleoActionReceiver])와 "동행 시작" 액티비티 필터는 권한 없이 exported 다. Gleo AI 가 어떤 권한·패키지로
  *   보내는지 문서에 없어 보낸 쪽을 검사하지 못한다(에뮬레이터에서도 보내는 쪽 패키지·권한은 확인하지 못함).
- * - 그래서 기기 안의 다른 앱도 동행 중 '다시 말하기'·'잠시 조용히'와 정차 중 '동행 시작'을 부를 수 있다.
- *   동행이 없으면 앞의 둘은 아무 일도 하지 않고, '동행 시작'은 저장된 길로만 시작하며 주행 중에는 받지 않는다.
- * - Gleo 의 송신 권한이 문서에 나오거나 실측되면 매니페스트에 permission 을 걸거나 보낸 쪽을 검사한다.
+ * - 그래서 기기 안의 다른 앱도 동행 중 '다시 말하기'·'다 왔다고 말하기'·'잠시 조용히'와 정차 중 '동행 시작'을 부를 수
+ *   있다. 줄인 것:
+ *   - 동행이 없으면 앞의 셋은 아무 일도 하지 않는다. '다 왔다고 말하기'와 '동행 시작'은 정차(P단) 중에만 받는다.
+ *   - '동행 시작'은 저장된 '자주 가는 길'로만 시작한다(바깥에서 가는 곳·호칭을 정하지 못한다).
+ *   - 연속 호출 제한([GleoLimits]): 말하기 4초에 한 번·1분에 네 번, 조용히 같은 수, 동행 시작 10초에 한 번·10분에 세 번.
+ *     차가 쉬지 않고 말하게 하거나 동행을 거듭 시작하지 못한다.
+ *   - '잠시 조용히'는 1~60분으로 자르고, 조용히 중에도 주행 중 문 열림·도착·운전자가 없는 동안의 안내는 한다. 화면에
+ *     '조용히 N분 남음'이 보여 운전자가 바로 풀 수 있다.
+ *   - 응답 방송(APP_ACTION_RESPONSE)은 받는 쪽을 정하지 못해(Gleo 패키지가 문서에 없다) 기기 안의 다른 앱도 받을 수
+ *     있으므로, 가는 곳 이름 같은 값을 싣지 않는다(성공·실패와 영어 문장, 조용히 몇 분만).
+ * - 줄이지 못한 것: 보낸 쪽 확인(권한·서명), 응답 방송의 받는 쪽 지정, 정차 중 바깥에서의 '동행 시작' 자체.
+ *   Gleo 의 송신 권한이나 패키지가 문서에 나오거나 실측되면 매니페스트에 permission 을 걸거나 보낸 쪽을 검사한다.
  */
 object Gleo {
     const val ACTION_REPEAT = "REPEAT_TRIP_ANSWER"
@@ -52,6 +62,11 @@ object Gleo {
     /** 앱이 직접 말할 때는 Gleo 의 음성을 끈다. */
     const val MODE_SILENT = "silent"
     const val MODE_VOICE = "voice"
+
+    private const val MESSAGE_NO_TRIP = "No companion trip is in progress."
+    private const val MESSAGE_TOO_MANY = "Too many requests came in a short time, so this one was ignored."
+
+    private fun now() = SystemClock.elapsedRealtime()
 
     /** Callback Schema 에 맞춰 결과를 Gleo AI 에 돌려준다. message 는 영어 문장이어야 한다. */
     fun respond(
@@ -91,11 +106,16 @@ object Gleo {
 
     /** "다시 말씀드리기" */
     fun handleRepeat(context: Context, container: AppContainer) {
-        if (container.trip.repeat()) {
-            respond(context, ACTION_REPEAT, STATUS_SUCCESS, "The passenger was told again by voice.", MODE_SILENT)
-        } else {
-            respond(context, ACTION_REPEAT, STATUS_FAIL, "No companion trip is in progress.")
+        if (!container.trip.inProgress) {
+            respond(context, ACTION_REPEAT, STATUS_FAIL, MESSAGE_NO_TRIP)
+            return
         }
+        if (!container.gleoLimits.speak.tryAcquire(now())) {
+            respond(context, ACTION_REPEAT, STATUS_FAIL, MESSAGE_TOO_MANY)
+            return
+        }
+        container.trip.repeat()
+        respond(context, ACTION_REPEAT, STATUS_SUCCESS, "The passenger was told again by voice.", MODE_SILENT)
     }
 
     /**
@@ -104,12 +124,20 @@ object Gleo {
      * 정차(P단) 중에만 받는다. 달리는 중에 "다 왔어요"라고 하지 않는다.
      */
     fun handleArrived(context: Context, container: AppContainer) {
+        if (!container.trip.inProgress) {
+            respond(context, ACTION_REPEAT, STATUS_FAIL, MESSAGE_NO_TRIP)
+            return
+        }
+        if (!container.gleoLimits.speak.tryAcquire(now())) {
+            respond(context, ACTION_REPEAT, STATUS_FAIL, MESSAGE_TOO_MANY)
+            return
+        }
         when (container.trip.confirmArrival()) {
             ArrivalConfirm.CONFIRMED, ArrivalConfirm.ALREADY_ARRIVED -> respond(
                 context, ACTION_REPEAT, STATUS_SUCCESS,
                 "The passenger was told by voice that the car has arrived, and the ride companion is ending.", MODE_SILENT,
             )
-            ArrivalConfirm.NO_TRIP -> respond(context, ACTION_REPEAT, STATUS_FAIL, "No companion trip is in progress.")
+            ArrivalConfirm.NO_TRIP -> respond(context, ACTION_REPEAT, STATUS_FAIL, MESSAGE_NO_TRIP)
             ArrivalConfirm.NOT_PARKED -> respond(
                 context, ACTION_REPEAT, STATUS_FAIL, "Arrival can only be told to the passenger after the car is parked.",
             )
@@ -122,14 +150,19 @@ object Gleo {
     /** "잠시 조용히" */
     fun handlePause(context: Context, container: AppContainer, params: JSONObject) {
         val minutes = params.optDouble("minutes", 10.0).let { if (it.isNaN()) 10.0 else it }.toInt().coerceIn(1, 60)
-        if (container.trip.quiet(minutes)) {
-            respond(
-                context, ACTION_PAUSE, STATUS_SUCCESS, "Voice guidance is paused.",
-                data = mapOf("minutes" to minutes.toString()),
-            )
-        } else {
-            respond(context, ACTION_PAUSE, STATUS_FAIL, "No companion trip is in progress.")
+        if (!container.trip.inProgress) {
+            respond(context, ACTION_PAUSE, STATUS_FAIL, MESSAGE_NO_TRIP)
+            return
         }
+        if (!container.gleoLimits.pause.tryAcquire(now())) {
+            respond(context, ACTION_PAUSE, STATUS_FAIL, MESSAGE_TOO_MANY)
+            return
+        }
+        container.trip.quiet(minutes)
+        respond(
+            context, ACTION_PAUSE, STATUS_SUCCESS, "Voice guidance is paused.",
+            data = mapOf("minutes" to minutes.toString()),
+        )
     }
 
     /** "동행 시작"의 결과. 화면은 이것으로 어디로 갈지 정한다. */
@@ -140,6 +173,8 @@ object Gleo {
         NEED_SETUP,
         /** 주행 중이라 받지 않았다(설정은 P단에서만). */
         DRIVING,
+        /** 짧은 사이에 거듭 불러 받지 않았다(연속 호출 제한). */
+        TOO_MANY,
     }
 
     /**
@@ -166,11 +201,13 @@ object Gleo {
             )
             return StartResult.NEED_SETUP
         }
+        if (!container.gleoLimits.start.tryAcquire(now())) {
+            respond(context, ACTION_START, STATUS_FAIL, MESSAGE_TOO_MANY)
+            return StartResult.TOO_MANY
+        }
         container.trip.start(route.config, route.rememberArrival)
-        respond(
-            context, ACTION_START, STATUS_SUCCESS, "The companion trip has started.", MODE_SILENT,
-            data = mapOf("destinationName" to route.config.place),
-        )
+        // 응답 방송은 기기 안의 다른 앱도 받을 수 있어 가는 곳 이름을 싣지 않는다(앱이 직접 말하므로 Gleo 도 쓸 일이 없다).
+        respond(context, ACTION_START, STATUS_SUCCESS, "The companion trip has started.", MODE_SILENT)
         return StartResult.STARTED
     }
 

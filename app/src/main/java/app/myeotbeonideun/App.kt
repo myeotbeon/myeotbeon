@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.pm.PackageManager
 import app.myeotbeonideun.data.AppStore
 import app.myeotbeonideun.engine.script.ScriptBook
+import app.myeotbeonideun.gleo.GleoLimits
 import app.myeotbeonideun.service.TripController
 import app.myeotbeonideun.signal.DemoSignalSource
 import app.myeotbeonideun.signal.DrivingLock
@@ -108,6 +109,9 @@ class AppContainer(
     val foreground: StateFlow<Boolean> = foregroundTracker.foreground
 
     val trip = TripController(app, this)
+
+    /** Gleo(와 같은 꼴로 부르는 바깥 앱)의 연속 호출 제한(결함 18). */
+    val gleoLimits = GleoLimits()
 
     init {
         demoSource.start()
