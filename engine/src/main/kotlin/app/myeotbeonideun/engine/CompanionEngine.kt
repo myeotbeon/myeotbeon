@@ -245,6 +245,19 @@ class CompanionEngine(
      */
     fun acceptsQuestions(nowMs: Long): Boolean = phase != Phase.ENDED && !isQuiet(nowMs)
 
+    /**
+     * 다른 말 뒤에서 기다리던 말이 소리 내기 직전에도 맞는지. 바깥(음성 대기열)이 말을 꺼낼 때 묻는다.
+     * 밀린 사이 차가 섰거나 도착했으면 먼저 하는 구간 말("잘 가고 있어요")은 맞지 않고,
+     * 도착한 뒤의 정차 말("차를 세웠어요")은 늦다. 그런 말은 버린다(운전자가 시킨 말·대답·안전 안내는 그대로).
+     */
+    fun stillCurrent(situation: String, kind: SpeechKind): Boolean = when {
+        phase == Phase.ENDED -> false
+        kind == SpeechKind.PROACTIVE && situation.startsWith("stage_") ->
+            phase != Phase.ARRIVED && signals.motion != Motion.PARKED
+        kind == SpeechKind.STOP && situation.startsWith("stop_") -> phase != Phase.ARRIVED
+        else -> true
+    }
+
     /** 동승자의 물음을 알아들었다(실험 기능). */
     fun onPassengerAsked(intent: PassengerIntent, nowMs: Long): List<EngineAction> {
         if (!acceptsQuestions(nowMs)) return emptyList()

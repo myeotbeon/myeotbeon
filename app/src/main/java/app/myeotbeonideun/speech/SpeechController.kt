@@ -72,7 +72,12 @@ class SpeechController(
             .build()
 
     /** 기다리는 말. onResult 는 말이 끝나거나 버려질 때 꼭 한 번 불린다. */
-    private class Pending(val text: String, val urgent: Boolean, val onResult: ((SpeechResult) -> Unit)?)
+    private class Pending(
+        val text: String,
+        val urgent: Boolean,
+        val onResult: ((SpeechResult) -> Unit)?,
+        val stillValid: (() -> Boolean)? = null,
+    )
 
     private val queue = ArrayDeque<Pending>()
     private var worker: Job? = null
@@ -115,10 +120,17 @@ class SpeechController(
      * @param interrupt true 면 하던 말과 기다리던 말을 버리고 이 말을 한다(버린 말은 [SpeechResult.INTERRUPTED])
      * @param urgent true 면 내비 안내·통화가 끝나기를 기다리지 않는다(급한 안전 알림)
      * @param onResult 말마다 한 번, 메인 스레드에서 불린다
+     * @param stillValid 소리 내기 직전에 한 번 묻는다. false 면 그새 사실이 바뀐 말이라 소리 내지 않는다([SpeechResult.STALE])
      */
-    fun speak(text: String, interrupt: Boolean, urgent: Boolean = false, onResult: ((SpeechResult) -> Unit)? = null) {
+    fun speak(
+        text: String,
+        interrupt: Boolean,
+        urgent: Boolean = false,
+        stillValid: (() -> Boolean)? = null,
+        onResult: ((SpeechResult) -> Unit)? = null,
+    ) {
         if (interrupt) cancelCurrent(SpeechResult.INTERRUPTED)
-        queue.addLast(Pending(text, urgent, onResult))
+        queue.addLast(Pending(text, urgent, onResult, stillValid))
         _speaking.value = true
         if (worker?.isActive != true) worker = scope.launch { drain() }
     }
@@ -194,6 +206,7 @@ class SpeechController(
         ensureSpeaker() ?: return SpeechResult.NO_ENGINE
         if (gen != generation) return stopReason
         if (!p.urgent) waitForOtherAudio(gen)?.let { return it }
+        if (p.stillValid?.invoke() == false) return SpeechResult.STALE
         if (!acquireFocus(gen)) return if (gen != generation) stopReason else SpeechResult.FOCUS_DENIED
         _lastSkip.value = null
         return when (say(p.text, gen)) {

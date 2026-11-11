@@ -5,7 +5,7 @@
 
 ## 지금 상태 (2026-11-11, 에뮬레이터 실기 검증, 독립 검토 결함 수정, 두 번째 검토의 지적 수정 뒤)
 
-- `./gradlew :engine:test :app:testDebugUnitTest assembleRelease` 통과. 단위 테스트 376개(엔진 172, 앱 204 — 화면 그림 18장 포함).
+- `./gradlew :engine:test :app:testDebugUnitTest assembleRelease` 통과. 단위 테스트 378개(엔진 173, 앱 205 — 화면 그림 18장 포함).
   `:app:lintDebug` 오류 0·경고 10(의존성 최신 버전 안내 7, 시험 코드의 이름 규칙 2, 리소스 폴더 v26 1).
 - 대본 40개 상황, 132줄(동승자 26상황 x 4, 운전자 알림 6상황 x 2, 카드 8상황 x 2). 앱의 대본 검사기 오류 0건·주의 6건(운전자 알림 여섯
   상황의 변형이 2개), 대본 담당 검사기(`lint_scripts.py`) 오류 0건·참고 1건.

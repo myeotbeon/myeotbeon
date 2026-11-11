@@ -59,6 +59,20 @@ class SpeechControllerTest {
     }
 
     @Test
+    fun `기다리는 사이 맞지 않게 된 말은 소리 내지 않고 STALE 로 돌려준다`() {
+        // 앞의 말이 끝나기를 기다리는 사이 차가 섰다: "잘 가고 있어요"는 버린다. 운전자 화면에는 까닭을 띄우지 않는다.
+        var stillTrue = true
+        say("어머니, 안전띠가 풀려 있어요.")
+        speech.speak("어머니, 잘 가고 있어요.", false, false, { stillTrue }) { results += "어머니, 잘 가고 있어요." to it }
+        stillTrue = false
+        idle(8_000)
+        assertEquals(SpeechResult.SPOKEN, result("어머니, 안전띠가 풀려 있어요."))
+        assertEquals(SpeechResult.STALE, result("어머니, 잘 가고 있어요."))
+        assertEquals(listOf("어머니, 안전띠가 풀려 있어요."), speaker.said)
+        assertNull(speech.lastSkip.value)
+    }
+
+    @Test
     fun `음성 엔진이 없으면 엔진 없음으로 건너뛴다`() {
         speaker.available = false
         say("어머니, 큰딸 집에 가요.")

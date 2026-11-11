@@ -32,6 +32,9 @@ enum class SpeechResult(val spoken: Boolean) {
 
     /** '잠시 조용히'로 멈췄다. */
     SILENCED(false),
+
+    /** 기다리는 사이 사실이 바뀌어(차가 섰거나 도착함) 맞지 않게 된 말이라 소리 내지 않았다. */
+    STALE(false),
     ;
 
     /**

@@ -7,6 +7,7 @@ import app.myeotbeonideun.engine.model.Purpose
 import app.myeotbeonideun.engine.model.Signals
 import app.myeotbeonideun.engine.model.TripConfig
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -122,6 +123,26 @@ class ScenarioThirtyMinutesTest {
         println("상황별: $bySituation")
         assertTrue("말이 하나도 없으면 시험이 잘못됐다", s.spoken.isNotEmpty())
         assertEquals("버튼은 두 번", 2, s.spoken.count { it.second.kind == SpeechKind.DRIVER_REQUEST })
+    }
+
+    @Test
+    fun staleLinesAreDroppedAfterParkingOrArrival() {
+        // 다른 말 뒤에서 기다리던 구간 말은 그새 P단으로 섰으면 맞지 않고, 정차 말은 도착 뒤에 늦다(에뮬레이터 시연에서 본 일)
+        val s = Sim()
+        s.signals = s.signals.copy(nav = NavState())
+        s.start()
+        s.drive(10)
+        s.set { copy(gear = Gear.DRIVE) }
+        s.drive(30)
+        assertTrue(s.engine.stillCurrent("stage_onway", SpeechKind.PROACTIVE))
+        s.set { copy(gear = Gear.PARK) }
+        s.drive(1)
+        assertFalse(s.engine.stillCurrent("stage_onway", SpeechKind.PROACTIVE))
+        assertTrue("운전자가 시킨 말은 그대로", s.engine.stillCurrent("stage_onway", SpeechKind.DRIVER_REQUEST))
+        assertTrue(s.engine.stillCurrent("stop_parked_neutral", SpeechKind.STOP))
+        s.engine.driverConfirmedArrival(s.now)
+        assertFalse(s.engine.stillCurrent("stop_parked_neutral", SpeechKind.STOP))
+        assertTrue("도착 안내는 그대로", s.engine.stillCurrent("arrive", SpeechKind.PROACTIVE))
     }
 
     /** 4②: 내비를 켜지 않은 20분 병원 길. 먼저 말하기 간격(모르면 5분)과, 도착을 단정하지 않는 정차, 운전자의 '도착했어요'. */

@@ -277,7 +277,9 @@ class TripController(private val context: Context, private val c: AppContainer) 
                     // '도착했어요' 뒤라면 이 도착 안내가 끝나기를 기다렸다가 동행을 마친다.
                     val f = finishing
                     if (f != null && f.arriveId == null && action.situation == ARRIVE_SITUATION) f.arriveId = action.id
-                    c.speech.speak(action.text, action.interrupt, urgent) { result ->
+                    // 다른 말 뒤에서 기다리던 사이 차가 서거나 도착했으면, 맞지 않게 된 구간 말·정차 말은 버린다.
+                    val stillValid = { e != null && engine === e && e.stillCurrent(action.situation, action.kind) }
+                    c.speech.speak(action.text, action.interrupt, urgent, stillValid) { result ->
                         // 말마다 결과(말함, 또는 건너뜀과 그 까닭)를 엔진에 돌려준다. 기록은 끝까지 소리 낸 말만 센다.
                         // 그새 동행이 끝났거나 바뀌었으면 버린다.
                         if (e != null && engine === e) {

@@ -544,7 +544,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app), DevPanelActions {
                 SpeechResult.FOCUS_DENIED -> R.string.companion_skip_focus
                 SpeechResult.ENGINE_FAILED -> R.string.companion_skip_engine
                 SpeechResult.NO_ENGINE -> R.string.companion_no_engine
-                SpeechResult.SPOKEN, SpeechResult.INTERRUPTED, SpeechResult.SILENCED, null -> null
+                SpeechResult.SPOKEN, SpeechResult.INTERRUPTED, SpeechResult.SILENCED, SpeechResult.STALE, null -> null
             }
         }
 
