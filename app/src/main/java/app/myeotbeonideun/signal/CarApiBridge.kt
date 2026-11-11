@@ -80,6 +80,8 @@ internal class CarApiBridge(
             hasGear = pm.registerCallback(
                 propertyCallback, VehiclePropertyIds.GEAR_SELECTION, CarPropertyManager.SENSOR_RATE_ONCHANGE,
             )
+            // 등록 콜백의 첫 값은 늦게 온다. 붙이는 순간 지금 변속단도 읽어 둔다(화면 밖 Gleo 호출이 주행 중인지 바로 알게).
+            if (hasGear) runCatching { pm.getIntProperty(VehiclePropertyIds.GEAR_SELECTION, 0) }.getOrNull()?.let { onGear(gearOf(it)) }
         } else {
             note("변속단(GEAR_SELECTION)을 읽을 수 없습니다 → 주행 규제 상태로 대신 판단")
         }

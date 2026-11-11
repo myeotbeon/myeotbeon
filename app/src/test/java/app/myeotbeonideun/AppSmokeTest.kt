@@ -171,6 +171,30 @@ class AppFlowTest {
     }
 
     @Test
+    fun `Gleo 의 동행 시작은 주행 중이면 받지 않고 이유를 돌려준다`() {
+        val c = app.container
+        c.store.saveRoute(TripConfig(place = "큰딸 집"), rememberArrival = false, nowMs = 1_000)
+        c.demoSource.update { it.copy(gear = Gear.DRIVE) }
+        idle(1)
+        assertEquals(Gleo.StartResult.DRIVING, Gleo.handleStart(app, c, org.json.JSONObject()))
+        assertFalse(c.trip.inProgress)
+        val refused = lastGleoResponse()
+        assertEquals(Gleo.STATUS_FAIL, refused.getString("status"))
+        assertTrue(refused.getString("message").contains("parked"))
+
+        c.demoSource.update { it.copy(gear = Gear.PARK) }
+        idle(1)
+        assertEquals(Gleo.StartResult.STARTED, Gleo.handleStart(app, c, org.json.JSONObject()))
+        assertTrue(c.trip.inProgress)
+        assertEquals(Gleo.StartResult.ALREADY_RUNNING, Gleo.handleStart(app, c, org.json.JSONObject()))
+        c.trip.end()
+
+        c.store.clearAll()
+        assertEquals(Gleo.StartResult.NEED_SETUP, Gleo.handleStart(app, c, org.json.JSONObject()))
+        assertEquals(Gleo.STATUS_ASKING, lastGleoResponse().getString("status"))
+    }
+
+    @Test
     fun `주행 규제가 켜지면 화면 틀이 정차 전용 화면을 잠근다`() {
         val c = app.container
         val vm = AppViewModel(app)

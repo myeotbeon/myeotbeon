@@ -1,5 +1,6 @@
 package app.myeotbeonideun
 
+import android.content.Intent
 import android.os.Looper
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
@@ -7,8 +8,10 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ApplicationProvider
 import app.myeotbeonideun.engine.model.Gear
+import app.myeotbeonideun.gleo.Gleo
 import app.myeotbeonideun.engine.model.TripConfig
 import app.myeotbeonideun.engine.model.VehicleState
 import app.myeotbeonideun.signal.Capabilities
@@ -24,7 +27,9 @@ import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
+import org.json.JSONObject
 import org.junit.runner.RunWith
+import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
@@ -111,6 +116,35 @@ class VehicleSourceChoiceTest {
         assertEquals(SpeedAsk.HIDDEN, vm.shell.value.speedAsk)
         assertEquals(1, fake.speedRefreshes)
     }
+
+    @Test
+    fun `Gleo 의 동행 시작은 실차가 주행 중이면 체험 모드여도 받지 않는다`() {
+        val c = app.container
+        c.store.updateSettings { it.copy(demoMode = true) }
+        c.store.saveRoute(TripConfig(place = "큰딸 집"), rememberArrival = false, nowMs = 1_000)
+        fake.state.value = VehicleState(gear = Gear.DRIVE, uxRestricted = true)
+        idle()
+        assertFalse("화면도 동행도 없어 아직 구독 전", fake.started)
+        assertEquals(Gleo.StartResult.DRIVING, Gleo.handleStart(app, c, JSONObject()))
+        assertTrue("화면 밖 호출이라 차량 신호를 먼저 붙여 지금 값을 본다", fake.started)
+        assertFalse(c.trip.inProgress)
+    }
+
+    @Test
+    fun `실차 주행 중 Gleo 로 동행 시작을 부르면 시작하지 않고 동행 화면에서 기다린다`() {
+        c().store.saveRoute(TripConfig(place = "큰딸 집"), rememberArrival = false, nowMs = 1_000)
+        fake.state.value = VehicleState(gear = Gear.DRIVE, uxRestricted = true)
+        val activity = Robolectric.buildActivity(MainActivity::class.java, Intent(Gleo.ACTION_START)).setup()
+        idle()
+        assertFalse(c().trip.inProgress)
+        val vm = ViewModelProvider(activity.get())[AppViewModel::class.java]
+        assertEquals(Screen.COMPANION, vm.shell.value.screen)
+        assertEquals("차를 세운 뒤 출발 전 설정에서 시작하세요 안내가 보이는 화면", false, vm.companion.value.active)
+        assertTrue(vm.companion.value.restricted)
+        activity.pause().stop().destroy()
+    }
+
+    private fun c() = app.container
 
     @Test
     fun `실차 주행 중에는 체험 모드의 개발자 패널도 잠긴다`() {

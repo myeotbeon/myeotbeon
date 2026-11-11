@@ -81,8 +81,10 @@ class MainActivity : ComponentActivity() {
     private fun handleGleo(intent: Intent?) {
         if (intent?.action != Gleo.ACTION_START) return
         val container = (application as App).container
-        val started = Gleo.handleStart(this, container, GleoParams.parse(intent.getStringExtra(Gleo.EXTRA_PARAM)))
-        vm.navigate(if (started) Screen.COMPANION else Screen.SETUP)
+        val result = Gleo.handleStart(this, container, GleoParams.parse(intent.getStringExtra(Gleo.EXTRA_PARAM)))
+        // 저장된 길이 없으면 출발 전 설정으로. 주행 중이라 받지 않았으면 동행 화면(“차를 세운 뒤 출발 전 설정에서
+        // 시작하세요”)으로 — 출발 전 설정은 주행 중에 잠겨 있다.
+        vm.navigate(if (result == Gleo.StartResult.NEED_SETUP) Screen.SETUP else Screen.COMPANION)
         intent.action = null // 화면을 다시 만들 때 또 시작하지 않게
     }
 
