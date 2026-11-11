@@ -116,7 +116,12 @@ fun MyeotbeonApp(
     val shell by vm.shell.collectAsStateWithLifecycle()
     val companion by vm.companion.collectAsStateWithLifecycle()
 
-    AppShell(shell, onNavigate = vm::navigate, onAcceptNotice = vm::acceptNotice) { screen, wide ->
+    AppShell(
+        shell,
+        onNavigate = vm::navigate,
+        onAcceptNotice = vm::acceptNotice,
+        onRequestSpeedPermission = onNeedSpeedPermission,
+    ) { screen, wide ->
         when (screen) {
             Screen.COMPANION -> CompanionScreen(
                 companion, vm::repeat, vm::toggleQuiet, vm::endTrip, { vm.navigate(Screen.SETUP) },

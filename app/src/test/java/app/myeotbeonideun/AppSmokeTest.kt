@@ -21,6 +21,7 @@ import app.myeotbeonideun.engine.model.SeatPosition
 import app.myeotbeonideun.ui.AppViewModel
 import app.myeotbeonideun.ui.MainActivity
 import app.myeotbeonideun.ui.Screen
+import app.myeotbeonideun.ui.SpeedAsk
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -50,6 +51,8 @@ class AppFlowTest {
         assertFalse(app.container.isAutomotive)
         assertEquals(SourceKind.DEMO, app.container.source.value.kind)
         assertFalse(app.container.drivingRestricted.value)
+        // 차량용 기기가 아니면 속도 권한을 권하지 않는다
+        assertEquals(SpeedAsk.HIDDEN, AppViewModel(app).shell.value.speedAsk)
     }
 
     @Test

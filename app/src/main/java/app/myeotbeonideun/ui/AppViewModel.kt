@@ -57,11 +57,22 @@ enum class Screen(val parkedOnly: Boolean) {
     DEV(true),
 }
 
+/** 첫 실행 안내에서 속도 신호 허용을 권하는지(결함 7). */
+enum class SpeedAsk {
+    /** 권하지 않는다(차량용 기기가 아니거나 이미 허용했다). */
+    HIDDEN,
+    /** '속도 신호 허용하기' 버튼을 보인다. */
+    SUGGEST,
+    /** 한 번 물었고 허용하지 않았다. 환경설정에서 언제든 허용할 수 있다고만 적는다(다시 조르지 않는다). */
+    DECLINED,
+}
+
 /**
  * 화면 틀(메뉴, 알림표)이 그리는 데 필요한 것.
  *
  * @property restricted 주행 중 화면 잠금(지금 신호 출처의 규제 OR 실차의 규제)
  * @property vehicleRestricted 실차가 주행 규제 중인지(체험 모드여도 실제 차의 값)
+ * @property speedAsk 첫 실행 안내(정차 중에만 보인다)에서 속도 신호 허용을 권하는지
  */
 data class ShellUi(
     val screen: Screen = Screen.SETUP,
@@ -70,6 +81,7 @@ data class ShellUi(
     val demo: Boolean = false,
     val noticeAccepted: Boolean = true,
     val vehicleRestricted: Boolean = false,
+    val speedAsk: SpeedAsk = SpeedAsk.HIDDEN,
 ) {
     /**
      * 지금 화면 대신 잠금 안내를 보이는지. 정차 전용 화면은 주행 중에 잠근다.
@@ -97,6 +109,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app), DevPanelActions {
     private val _form = MutableStateFlow(c.store.routes.value.firstOrNull()?.let { SetupForm.from(it).copy(seatAuto = true) } ?: SetupForm())
     private var placeEdited = false
     private val _speedGranted = MutableStateFlow(checkSpeedPermission())
+    /** 이번 실행에서 속도 권한을 한 번 물었는지(첫 실행 안내에서 다시 조르지 않는다). */
+    private val _speedAsked = MutableStateFlow(false)
 
     init {
         // 좌석 값 자동 판별: 운전자가 화면을 조작하는 출발 전 설정(P단)에서는 운전석에 사람이 있다.
@@ -125,8 +139,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app), DevPanelActions {
     val shell: StateFlow<ShellUi> =
         combine(
             _screen, c.drivingRestricted, c.vehicleRestricted, c.trip.ui,
-            combine(sourceKind, c.store.settings) { kind, settings -> kind to settings },
-        ) { screen, restricted, vehicleRestricted, trip, (kind, settings) ->
+            combine(sourceKind, c.store.settings, _speedGranted, _speedAsked) { kind, settings, granted, asked ->
+                Triple(kind, settings, speedAsk(granted, asked))
+            },
+        ) { screen, restricted, vehicleRestricted, trip, (kind, settings, speedAsk) ->
             ShellUi(
                 screen = screen,
                 restricted = restricted,
@@ -134,8 +150,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app), DevPanelActions {
                 demo = kind == SourceKind.DEMO,
                 noticeAccepted = settings.noticeAccepted,
                 vehicleRestricted = vehicleRestricted,
+                speedAsk = speedAsk,
             )
         }.stateIn(viewModelScope, SharingStarted.Eagerly, ShellUi(_screen.value))
+
+    /**
+     * 속도 권한(CAR_SPEED)이 없으면 첫 실행 안내에서 한 번 허용을 권한다. 허용하지 않으면 '정지'는
+     * 주행 단에서 브레이크를 20초 넘게 밟고 있는 것으로만 본다(오토홀드로 발을 떼고 서 있으면 모른다).
+     */
+    private fun speedAsk(granted: Boolean, asked: Boolean): SpeedAsk = when {
+        !c.isAutomotive || granted -> SpeedAsk.HIDDEN
+        asked -> SpeedAsk.DECLINED
+        else -> SpeedAsk.SUGGEST
+    }
 
     fun navigate(screen: Screen) {
         _screen.value = screen
@@ -342,6 +369,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app), DevPanelActions {
     }
 
     fun onSpeedPermissionResult(granted: Boolean) {
+        _speedAsked.value = true
         _speedGranted.value = granted
         // 구독 전체를 놓았다 붙이지 않고 속도 신호만 다시 붙인다(동행 중의 좌석·문 값이 끊기지 않게).
         if (granted) c.vehicleSource.refreshSpeedPermission()

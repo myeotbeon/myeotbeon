@@ -59,6 +59,7 @@ private val NAV_ITEMS = listOf(
  * 체험 모드의 개발자 패널은 모의 신호로 '주행'을 흉내 내는 도구라 모의 주행만으로는 잠그지 않는다
  * (실차가 주행 중이면 잠근다).
  *
+ * @param onRequestSpeedPermission 첫 실행 안내의 '속도 신호 허용하기'(정차 중에만 보인다)
  * @param content 지금 화면을 그린다. 둘째 인자는 넓은 창인지
  */
 @Composable
@@ -66,6 +67,7 @@ fun AppShell(
     shell: ShellUi,
     onNavigate: (Screen) -> Unit,
     onAcceptNotice: () -> Unit,
+    onRequestSpeedPermission: () -> Unit = {},
     content: @Composable (Screen, Boolean) -> Unit,
 ) {
     val colors = LocalAppColors.current
@@ -73,7 +75,7 @@ fun AppShell(
         BoxWithConstraints(Modifier.fillMaxSize().safeDrawingPadding()) {
             val wide = maxWidth >= 900.dp
             if (!shell.noticeAccepted && !shell.restricted) {
-                FirstNotice(onAcceptNotice)
+                FirstNotice(shell.speedAsk, onAcceptNotice, onRequestSpeedPermission)
                 return@BoxWithConstraints
             }
             val body: @Composable (Modifier) -> Unit = { m ->
@@ -139,9 +141,12 @@ private fun NavButton(item: NavItem, shell: ShellUi, onNavigate: (Screen) -> Uni
     }
 }
 
-/** 처음 실행할 때 한 번 보이는 안내. '확인했어요'를 눌러야만 넘어간다. */
+/**
+ * 처음 실행할 때 한 번 보이는 안내. '확인했어요'를 눌러야만 넘어간다. 정차 중에만 보인다.
+ * 속도 권한이 없으면 여기서 한 번 허용을 권한다(허용 창이 '위치 정보'로 뜬다는 것을 미리 말해 둔다).
+ */
 @Composable
-private fun FirstNotice(onAccept: () -> Unit) {
+private fun FirstNotice(speedAsk: SpeedAsk, onAccept: () -> Unit, onRequestSpeedPermission: () -> Unit) {
     val colors = LocalAppColors.current
     Column(
         Modifier
@@ -159,6 +164,21 @@ private fun FirstNotice(onAccept: () -> Unit) {
             Spacer(Modifier.height(4.dp))
             SectionTitle(stringResource(R.string.settings_privacy))
             Text(stringResource(R.string.settings_privacy_body), style = AppType.body, color = colors.text)
+        }
+        if (speedAsk != SpeedAsk.HIDDEN) {
+            Panel(Modifier.widthIn(max = 1100.dp)) {
+                SectionTitle(stringResource(R.string.notice_speed_title))
+                Text(
+                    stringResource(if (speedAsk == SpeedAsk.SUGGEST) R.string.notice_speed_body else R.string.notice_speed_declined),
+                    style = AppType.body, color = colors.text,
+                )
+                if (speedAsk == SpeedAsk.SUGGEST) {
+                    BigButton(
+                        stringResource(R.string.settings_speed_permission), onRequestSpeedPermission,
+                        primary = false, minHeight = 88.dp, textStyle = AppType.body,
+                    )
+                }
+            }
         }
         BigButton(stringResource(R.string.notice_accept), onAccept, Modifier.widthIn(min = 420.dp), minHeight = 112.dp)
     }

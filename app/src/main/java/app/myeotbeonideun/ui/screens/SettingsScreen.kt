@@ -195,6 +195,8 @@ fun SettingsScreen(
                     primary = false, minHeight = 88.dp, textStyle = AppType.body,
                     modifier = Modifier.fillMaxWidth(),
                 )
+                // 실기(에뮬레이터)에서 권한 창은 '위치 정보 액세스 허용'으로 뜬다. 놀라지 않게 미리 말해 둔다.
+                Text(stringResource(R.string.settings_speed_permission_dialog), style = AppType.small, color = colors.textSoft)
             }
         }
 

@@ -17,6 +17,7 @@ import app.myeotbeonideun.signal.SourceStatus
 import app.myeotbeonideun.ui.AppViewModel
 import app.myeotbeonideun.ui.MainActivity
 import app.myeotbeonideun.ui.Screen
+import app.myeotbeonideun.ui.SpeedAsk
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
@@ -94,6 +95,21 @@ class VehicleSourceChoiceTest {
         idle()
         assertFalse(c.drivingRestricted.value)
         assertFalse(c.isDrivingRestrictedNow())
+    }
+
+    @Test
+    fun `속도 권한이 없으면 첫 실행 안내에서 한 번 권하고 거절하면 다시 조르지 않는다`() {
+        val vm = AppViewModel(app)
+        idle()
+        assertEquals(SpeedAsk.SUGGEST, vm.shell.value.speedAsk)
+        vm.onSpeedPermissionResult(false)
+        idle()
+        assertEquals(SpeedAsk.DECLINED, vm.shell.value.speedAsk)
+        assertEquals(0, fake.speedRefreshes)
+        vm.onSpeedPermissionResult(true) // 환경설정에서 나중에 허용
+        idle()
+        assertEquals(SpeedAsk.HIDDEN, vm.shell.value.speedAsk)
+        assertEquals(1, fake.speedRefreshes)
     }
 
     @Test

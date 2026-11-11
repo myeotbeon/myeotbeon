@@ -143,6 +143,7 @@
     <string name="settings_seat_reading_note">차에 따라 좌석 신호의 사람 있음·없음이 반대로 올 수 있어요. 자동은 출발 전 설정(P단)과 동행을 시작할 때 운전석에 사람이 있다고 보고 정하고, 동행 중에는 바꾸지 않아요. 앉은 자리 고르기와 운전자가 내렸는지 판단에 이 값을 써요.</string>
     <string name="settings_speed_permission">속도 신호 허용하기</string>
     <string name="settings_speed_permission_note">허용하면 브레이크를 떼고 서 있을 때도 멈춤을 알 수 있어요</string>
+    <string name="settings_speed_permission_dialog">허용 창에는 ‘위치 정보’라고 나와요(속도 권한이 위치 권한 묶음으로 표시돼요). 앱이 읽는 것은 차의 속도예요.</string>
     <string name="settings_clear">모두 지우기</string>
     <string name="settings_clear_confirm">한 번 더 누르면 지워요</string>
     <string name="settings_dev">개발자 패널</string>
@@ -157,6 +158,9 @@
     <string name="notice_title">시작하기 전에</string>
     <string name="notice_intro">가는 길을 몇 번이든 대신 말해 드려요</string>
     <string name="notice_accept">확인했어요</string>
+    <string name="notice_speed_title">속도 신호 허용(권장)</string>
+    <string name="notice_speed_body">허용하면 차의 속도로 멈춤을 알아요(브레이크를 떼고 서 있어도). 허용하지 않으면 주행 단에서 브레이크를 20초 넘게 밟고 있을 때를 멈춤으로 봐요. 허용 창에는 ‘위치 정보’에 액세스한다고 나와요. 속도 권한이 위치 권한 묶음으로 표시되기 때문이에요. 이 허용으로 앱이 읽는 것은 차의 속도예요.</string>
+    <string name="notice_speed_declined">속도 신호를 허용하지 않았어요. 환경설정 › 차량 신호에서 언제든 허용할 수 있어요.</string>
 
     <!-- 개발자 패널 -->
     <string name="dev_title">개발자 패널</string>
