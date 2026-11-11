@@ -159,6 +159,7 @@ class TripController(private val context: Context, private val c: AppContainer) 
                     e.onSpeechState(c.speech.speaking.value, now())
                     perform(e.onTick(now()))
                     autoEndAfterArrival()
+                    autoEndWhenVacant()
                     finishIfDone()
                 }
             }
@@ -380,10 +381,24 @@ class TripController(private val context: Context, private val c: AppContainer) 
         if (now() - at >= AUTO_END_AFTER_ARRIVAL_MS) end()
     }
 
+    /**
+     * 운전자와 동승자가 함께 내린 차(P단, 운전석·동승 좌석 모두 비어 있음)가 [AUTO_END_VACANT_MS] 동안 그대로면 스스로 끝낸다
+     * (검토 NEW-2·NEW-7). 내비 없이 간 길이나 도착을 거둔 뒤에는 도착 뒤 자동 종료가 걸려 있지 않아, 그대로 두면 동행이
+     * 끝나지 않고 남았다가 나중에 다른 곳으로 갈 때 옛 가는 곳을 말한다. 기록은 [end] 가 남긴다. 좌석 신호가 없는 차는
+     * 차가 비었는지 알 수 없어 이것이 걸리지 않는다.
+     */
+    private fun autoEndWhenVacant() {
+        val e = engine ?: return
+        val since = e.snapshot(now()).vacantSinceMs ?: return
+        if (now() - since >= AUTO_END_VACANT_MS) end()
+    }
+
     private companion object {
         const val TICK_MS = 1_000L
         const val MIN_RECORD_SEC = 20
         const val AUTO_END_AFTER_ARRIVAL_MS = 10 * 60_000L
+        /** 운전자와 동승자가 함께 내린 차가 이만큼 비어 있으면 동행을 마친다. */
+        const val AUTO_END_VACANT_MS = 10 * 60_000L
         /** '도착했어요' 뒤 도착 안내를 기다리는 가장 긴 시간(내비 안내·통화를 기다리고 포커스를 다시 묻는 시간보다 길게). */
         const val FINISH_DEADLINE_MS = 30_000L
         const val ARRIVE_SITUATION = "arrive"

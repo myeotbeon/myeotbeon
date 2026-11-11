@@ -5,6 +5,7 @@ import android.os.Looper
 import androidx.test.core.app.ApplicationProvider
 import app.myeotbeonideun.engine.Phase
 import app.myeotbeonideun.engine.model.Gear
+import app.myeotbeonideun.engine.model.SeatPosition
 import app.myeotbeonideun.engine.model.TripConfig
 import app.myeotbeonideun.engine.stop.StopReason
 import app.myeotbeonideun.gleo.Gleo
@@ -131,6 +132,32 @@ class ArrivalConfirmTest {
         assertEquals(Phase.ARRIVED, snapshot().phase)
         idle(10)
         assertFalse(c.trip.inProgress)
+    }
+
+    @Test
+    fun `운전자와 동승자가 함께 내린 차가 10분 비어 있으면 동행을 스스로 마치고 기록을 남긴다`() {
+        // 내비 없이 간 길이라 차는 도착을 모르고, 운전자는 '도착했어요'를 누르지 않고 어르신을 모시고 들어갔다(검토 NEW-2)
+        val c = app.container
+        driveWithoutNavi()
+        c.demoSource.update { it.copy(gear = Gear.PARK) }
+        idle(8)
+        c.demoSource.update {
+            it.copy(
+                doorOpen = it.doorOpen + (SeatPosition.DRIVER to true),
+                seatOccupied = it.seatOccupied + (SeatPosition.DRIVER to false),
+            )
+        }
+        idle(20)
+        c.demoSource.update { it.copy(seatOccupied = it.seatOccupied + (SeatPosition.REAR_RIGHT to false)) }
+        idle(5) // 좌석 값 완충 2.5초 뒤 자리가 빈 때의 안심 말 한 번이 끝날 때까지
+        assertTrue("차가 비었다", snapshot().vacantSinceMs != null)
+        val saidWhileVacant = app.speaker.said.size
+        idle(9 * 60)
+        assertTrue("10분이 되기 전에는 그대로", c.trip.inProgress)
+        idle(60)
+        assertFalse("빈 차가 10분이면 동행을 마친다", c.trip.inProgress)
+        assertEquals("빈 차에는 말하지 않았다", saidWhileVacant, app.speaker.said.size)
+        assertEquals("기록은 남긴다", 1, c.store.records.value.size)
     }
 
     @Test

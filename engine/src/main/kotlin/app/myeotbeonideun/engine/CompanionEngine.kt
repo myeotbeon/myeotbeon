@@ -104,6 +104,8 @@ class CompanionEngine(
     private var lastPassengerSeat: Boolean? = null
     private var seatDoorJustOpened = false
     private var passengerJustLeft = false
+    /** P단에서 운전석과 동승 좌석이 모두 빈 때부터의 시각(차가 비었다). 아니면 null. */
+    private var vacantSince: Long? = null
 
     // 신호 반응(문·창문·안전띠). 한 번의 일(문 한 번 열림 등)마다 번호를 붙여, 되풀이 안내를 한 건으로 센다.
     private var doorAlertAt: Long? = null
@@ -337,6 +339,7 @@ class CompanionEngine(
             cardStage = cardStageLine(),
             counts = counts,
             canConfirmArrival = phase == Phase.DRIVING && signals.motion == Motion.PARKED,
+            vacantSinceMs = vacantSince,
         )
     }
 
@@ -363,6 +366,9 @@ class CompanionEngine(
         val passengerNow = passengerSeat.update(s.seatOccupied, now)
         passengerJustLeft = lastPassengerSeat == true && passengerNow == false
         lastPassengerSeat = passengerNow
+        // 운전자와 동승자가 함께 내려 차가 비었는지(흔들림을 거른 좌석 값). 오래 이어지면 바깥이 동행을 마친다.
+        val vacant = s.motion == Motion.PARKED && driverSeat.value == false && passengerNow == false
+        vacantSince = if (vacant) vacantSince ?: now else null
         seatDoorJustOpened = s.seatDoorOpen == true && lastSeatDoorOpen != true
         lastSeatDoorOpen = s.seatDoorOpen
         val driverDoorJustOpened = s.driverDoorOpen == true && lastDriverDoorOpen != true

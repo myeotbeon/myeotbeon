@@ -896,6 +896,35 @@ class CompanionEngineTest {
     }
 
     @Test
+    fun `P단에서 운전석과 동승 좌석이 모두 비면 그때부터의 시각을 알리고 누가 앉거나 주행 단이면 지운다`() {
+        val rig = Rig()
+        rig.startAndDepart()
+        assertNull(rig.snapshot().vacantSinceMs)
+        rig.set { copy(gear = Gear.PARK, driverDoorOpen = true, driverSeatOccupied = false) }
+        rig.advance(10)
+        assertNull("동승자가 앉아 있으면 빈 차가 아니다", rig.snapshot().vacantSinceMs)
+        rig.set { copy(seatOccupied = false) }
+        rig.advance(2)
+        assertNull("좌석 값은 2.5초 그대로일 때 받는다", rig.snapshot().vacantSinceMs)
+        rig.advance(1)
+        val since = rig.snapshot().vacantSinceMs
+        assertEquals(rig.now, since)
+        rig.advance(600)
+        assertEquals("비어 있는 동안 그대로", since, rig.snapshot().vacantSinceMs)
+        rig.set { copy(seatOccupied = true) }
+        rig.advance(3)
+        assertNull(rig.snapshot().vacantSinceMs)
+
+        // 좌석 신호가 없는 차는 알 수 없다
+        val none = Rig()
+        none.signals = none.signals.copy(driverSeatOccupied = null, seatOccupied = null)
+        none.startAndDepart()
+        none.set { copy(gear = Gear.PARK) }
+        none.advance(600)
+        assertNull(none.snapshot().vacantSinceMs)
+    }
+
+    @Test
     fun `출발 전에도 운전자가 내리면 알린다`() {
         val rig = Rig()
         rig.start()

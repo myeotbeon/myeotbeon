@@ -136,4 +136,10 @@ data class EngineSnapshot(
      * 내비 없이 가는 길은 차가 도착을 스스로 알 수 없어 이것이 유일한 길이다([CompanionEngine.driverConfirmedArrival]).
      */
     val canConfirmArrival: Boolean = false,
+    /**
+     * 차가 빈 때부터의 시각: P단이고 운전석과 동승 좌석이 모두 비어 있다(좌석 값은 흔들림을 거른 값). 비어 있지 않거나
+     * 좌석 신호가 없으면 null. 바깥(TripController)은 이것이 오래 이어지면 동행을 스스로 마친다 — 운전자와 동승자가 함께
+     * 내린 뒤에도 동행이 남아, 나중에 다른 곳으로 갈 때 옛 가는 곳을 말하지 않게.
+     */
+    val vacantSinceMs: Long? = null,
 )

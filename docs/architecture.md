@@ -209,6 +209,8 @@
 3. `confirmArrival()` — 운전자가 `도착했어요`(또는 Gleo `REPEAT_TRIP_ANSWER` 의 `arrived: true`)를 누르면, 주행 중이 아니고 엔진이 받을 수 있을 때만
    `engine.driverConfirmedArrival` 을 부릅니다. 도착 안내(`arrive`)의 결과가 오면(소리 내지 못했어도) 다음 1초 틱에 동행을 마치고, 30초 안에 오지 않아도 마칩니다.
 4. `end()` — 엔진에서 횟수 기록을 받아 저장, 서비스 종료. 도착(`Arrived`)한 뒤 10분이 지나도 끝내지 않으면 스스로 끝냅니다.
+   운전자와 동승자가 함께 내려 P단에서 운전석·동승 좌석이 모두 10분 비어 있어도(`EngineSnapshot.vacantSinceMs`) 스스로 끝냅니다
+   (내비 없이 간 길이나 도착을 거둔 뒤에 동행이 남아 다음에 옛 가는 곳을 말하지 않게. 좌석 신호가 없는 차는 해당 없음).
    도착을 거두면(`ArrivalCancelled`) 그 예약도 풉니다. 도착 지점 기억은 `Arrived` 때 합니다(운전자가 알린 도착은 그때 위치로 새로,
    차가 본 도착은 저장된 지점이 없을 때만, 도착을 거두면 그 도착에서 저장한 지점을 되돌림).
 
@@ -219,8 +221,8 @@
 
 | 종류 | 위치 | 수 |
 |---|---|---|
-| 엔진 단위 테스트(JVM) | `engine/src/test` | 159 |
-| 앱 단위 테스트(JVM, 일부 Robolectric) | `app/src/test` | 188 |
+| 엔진 단위 테스트(JVM) | `engine/src/test` | 160 |
+| 앱 단위 테스트(JVM, 일부 Robolectric) | `app/src/test` | 189 |
 | 화면 그림(Roborazzi, 앱 단위 테스트에 포함) | `app/src/test/…/ScreenshotTest.kt` → `docs/screens` | 18장 |
 
 - `AppFlowTest` 는 실제 `Application` 을 띄워 체험 모드 신호로 출발~신호 대기~도착~기록 저장까지를 한 번에 돌립니다.
