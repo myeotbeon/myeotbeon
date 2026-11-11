@@ -56,6 +56,12 @@ data object Silence : EngineAction
 /** 도착했다(phase 가 ARRIVED 가 됨). 도착 지점을 기억하는 계기와 도착 뒤 자동 종료의 시작점으로 쓴다. */
 data class Arrived(val source: ArrivalSource) : EngineAction
 
+/**
+ * 도착 판정을 거뒀다: 도착 뒤 P단을 거쳐 주행 단으로 15초 넘게 달렸거나, 남은 시간으로 도착을 본 같은 경로의
+ * 남은 시간이 다시 늘었다. phase 는 DRIVING 으로 돌아간다. 도착 뒤의 자동 종료 예약을 푼다.
+ */
+data object ArrivalCancelled : EngineAction
+
 /** 시간 기준값. 시험과 시연에서 바꿀 수 있게 한곳에 모았다. */
 data class EngineParams(
     /** 한 말이 끝나고 다음 말을 하기까지의 최소 간격. */
@@ -91,6 +97,8 @@ data class EngineParams(
     val stageConfirmMs: Long = 10_000,
     /** … 내비 표본이 이만큼 연달아 같은 구간을 가리킬 때만 앞으로 간다(표본 하나로 굳히지 않는다). */
     val stageConfirmSamples: Int = 2,
+    /** 도착 뒤 P단을 거쳐 주행 단으로 이만큼 이어지면 도착이 아니었던 것으로 보고 거둔다. */
+    val rearmDriveMs: Long = 15_000,
 )
 
 /** 화면이 그리는 데 필요한 엔진 상태. */

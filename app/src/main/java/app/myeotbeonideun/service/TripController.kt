@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.SystemClock
 import app.myeotbeonideun.AppContainer
 import app.myeotbeonideun.data.SavedRoute
+import app.myeotbeonideun.engine.ArrivalCancelled
 import app.myeotbeonideun.engine.Arrived
 import app.myeotbeonideun.engine.CompanionEngine
 import app.myeotbeonideun.engine.DriverNotice
@@ -175,6 +176,8 @@ class TripController(private val context: Context, private val c: AppContainer) 
                     arrivedAtMs = now()
                     source?.let { rememberArrivalPoint(it) }
                 }
+                // 도착이 아니었다(다시 달림 등): 도착 뒤 자동 종료를 푼다.
+                ArrivalCancelled -> arrivedAtMs = null
             }
         }
         publish()

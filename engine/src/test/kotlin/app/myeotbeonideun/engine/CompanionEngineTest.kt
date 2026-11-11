@@ -592,6 +592,82 @@ class CompanionEngineTest {
     }
 
     @Test
+    fun `가짜 도착 뒤 다시 달리면 15초 뒤 도착을 거두고 주행 중으로 돌아간다`() {
+        val rig = Rig(TripConfig(place = "큰딸 집", interval = IntervalMode.FIVE_MIN))
+        rig.startAndDepart()
+        rig.nav { copy(remainSec = 50, remainMeters = 140) }
+        rig.set { copy(gear = Gear.PARK) } // 목적지 앞 약국에 잠깐 섰다
+        assertEquals(Phase.ARRIVED, rig.snapshot().phase)
+        rig.advance(30)
+        rig.clear()
+        rig.set { copy(gear = Gear.DRIVE) }
+        rig.advance(14)
+        assertEquals("15초가 안 되면 아직 도착으로 둔다", Phase.ARRIVED, rig.snapshot().phase)
+        rig.advance(1)
+        assertEquals(Phase.DRIVING, rig.snapshot().phase)
+        assertTrue(rig.log.any { it.second == ArrivalCancelled })
+        assertNotEquals(Stage.ARRIVED, rig.snapshot().stage)
+        assertNotEquals(StopReason.ARRIVED, rig.snapshot().stopReason)
+        assertEquals("도착 표시를 풀고 지금 구간(남은 50초)을 보인다", "거의 다 왔어요", rig.snapshot().cardStage)
+        assertTrue("다시 달리는 중에 '다 왔어요'를 다시 하지 않는다", rig.spoken("arrive").isEmpty())
+        rig.repeat(); rig.advance(10)
+        assertNotEquals("다시 말씀드리기도 '다 왔어요'가 아니다", "arrive", rig.spoken().last().situation)
+        // 진짜 목적지에 서면 다시 도착을 알린다
+        rig.nav { copy(remainSec = 20, remainMeters = 30) }
+        rig.set { copy(gear = Gear.PARK) }
+        assertEquals(Phase.ARRIVED, rig.snapshot().phase)
+        assertEquals(1, rig.spoken("arrive").size)
+        assertEquals(listOf(ArrivalSource.NEAR_DESTINATION), rig.arrivals())
+    }
+
+    @Test
+    fun `내비 도착 이벤트가 굴러가는 중에 왔으면 P단을 거치기 전에는 거두지 않는다`() {
+        val rig = Rig()
+        rig.startAndDepart()
+        rig.navArrived() // 큰 병원 정문에서 도착 이벤트. 아직 주차하러 가는 중
+        rig.advance(60)
+        assertEquals(Phase.ARRIVED, rig.snapshot().phase)
+        rig.set { copy(gear = Gear.PARK) }
+        rig.advance(5)
+        rig.set { copy(gear = Gear.DRIVE) } // 주차했다가 다시 나간다
+        rig.advance(16)
+        assertEquals(Phase.DRIVING, rig.snapshot().phase)
+        assertTrue(rig.log.any { it.second == ArrivalCancelled })
+    }
+
+    @Test
+    fun `남은 시간으로 도착을 봤는데 같은 경로의 남은 시간이 다시 늘면 도착을 거둔다`() {
+        val rig = Rig()
+        rig.startAndDepart()
+        rig.nav { copy(remainSec = 40, remainMeters = 2_000) } // 잘못 들어온 작은 남은 시간
+        rig.set { copy(gear = Gear.PARK) }
+        assertEquals(Phase.ARRIVED, rig.snapshot().phase)
+        rig.clear()
+        rig.nav { copy(remainSec = 50) } // 조금 흔들리는 것으로는 거두지 않는다
+        rig.advance(3)
+        assertEquals(Phase.ARRIVED, rig.snapshot().phase)
+        rig.nav { copy(remainSec = 900, remainMeters = 9_000) } // 같은 경로에서 다시 15분
+        assertEquals(Phase.DRIVING, rig.snapshot().phase)
+        assertTrue(rig.log.any { it.second == ArrivalCancelled })
+        rig.advance(6)
+        assertEquals("이제는 사실대로 아직 다 온 것이 아니라고 말한다", "stop_waypoint", rig.spoken().single().situation)
+    }
+
+    @Test
+    fun `운전자가 알린 도착은 돌아갈 길을 내비에 넣어도 거두지 않는다`() {
+        val rig = Rig()
+        rig.signals = rig.signals.copy(nav = NavState())
+        rig.startAndDepart()
+        rig.set { copy(gear = Gear.PARK) }
+        rig.advance(6)
+        rig.confirmArrival()
+        rig.nav { copy(guiding = true, totalSec = 1_200, remainSec = 1_200, remainMeters = 10_000) }
+        rig.advance(60)
+        assertEquals(Phase.ARRIVED, rig.snapshot().phase)
+        assertFalse(rig.log.any { it.second == ArrivalCancelled })
+    }
+
+    @Test
     fun `내비 도착이나 목적지 근처 도착도 도착 이벤트를 낸다`() {
         val nav = Rig()
         nav.startAndDepart()

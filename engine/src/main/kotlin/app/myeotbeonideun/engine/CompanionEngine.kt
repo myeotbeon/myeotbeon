@@ -67,6 +67,14 @@ class CompanionEngine(
     /** 출발 순간의 구간처럼 따로 말하지 않고 반영만 할 후보인지. */
     private var stageCandidateSilent = false
 
+    // 도착: 한 번 도착으로 봤어도 다시 달리거나 남은 시간이 다시 늘면 거둔다.
+    private var arrivalSource: ArrivalSource? = null
+    private var remainAtArrival: Int? = null
+    private var routeChangedSinceArrival = false
+    /** 도착한 뒤 P단을 본 적이 있는지(내비 도착 이벤트는 아직 굴러가는 중에 오기도 한다). */
+    private var arrivedSeenParked = false
+    private var driveSinceArrived: Long? = null
+
     // 멈춤 판단에 쓰는 시간 기록
     private var parkedSince: Long? = null
     private var driverDoorOpenedSincePark: Boolean? = null
@@ -318,6 +326,7 @@ class CompanionEngine(
         updateTrackers(now)
         evaluateSafety(now, out)
         evaluateDeparture(now)
+        evaluateArrivalHold(now, out)
         evaluateStop(now, out)
         evaluateStage(now, out)
         flush(now, out)
@@ -377,6 +386,7 @@ class CompanionEngine(
             if (prev != null && navTotal - prev >= maxOf(NEW_ROUTE_MIN_INCREASE_SEC, prev / 4)) {
                 newRoute = true
                 totalSec = navTotal
+                if (phase == Phase.ARRIVED) routeChangedSinceArrival = true
             }
             lastNavTotalSec = navTotal
         }
@@ -472,6 +482,51 @@ class CompanionEngine(
         if (computed.ordinal > stage.ordinal) startStageCandidate(computed, now, silent = true)
     }
 
+    /**
+     * 도착 판정을 되돌릴지 본다. 목적지 앞 약국·주유소에서 P단으로 섰거나 큰 병원 정문에서 내비 도착 이벤트가
+     * 일찍 와 도착으로 본 뒤에 다시 달리면, 도착이 아니었다.
+     * - 도착 뒤 P단을 거쳐 주행 단으로 [EngineParams.rearmDriveMs] 넘게 이어지면 거둔다.
+     *   (도착 이벤트가 굴러가는 중에 왔으면 P단을 볼 때까지는 재지 않는다 — 주차하러 가는 길이다.)
+     * - 남은 시간·거리로 도착을 봤는데 같은 경로의 남은 시간이 1분 넘게 다시 늘면(2분 넘게 남음) 거둔다.
+     *   운전자가 알린 도착이나 새 경로(돌아갈 길을 넣음)는 남은 시간으로 거두지 않는다.
+     */
+    private fun evaluateArrivalHold(now: Long, out: MutableList<EngineAction>) {
+        if (phase != Phase.ARRIVED) return
+        when (signals.motion) {
+            Motion.PARKED -> {
+                arrivedSeenParked = true
+                driveSinceArrived = null
+            }
+            Motion.IN_DRIVE -> if (arrivedSeenParked && driveSinceArrived == null) driveSinceArrived = now
+            Motion.UNKNOWN -> driveSinceArrived = null
+        }
+        val droveOn = driveSinceArrived?.let { now - it >= params.rearmDriveMs } ?: false
+        val remain = acceptedRemainSec
+        val atArrival = remainAtArrival
+        val remainGrew = arrivalSource == ArrivalSource.NEAR_DESTINATION && atArrival != null &&
+            !routeChangedSinceArrival && remain != null &&
+            remain >= maxOf(atArrival, ARRIVE_REMAIN_SEC) + REARM_REMAIN_INCREASE_SEC
+        if (droveOn || remainGrew) cancelArrival(now, out)
+    }
+
+    /** 도착 판정을 거두고 주행 중으로 돌아간다. 도착 표시를 풀고 구간을 지금 사실로 다시 정한다(따로 말하지는 않는다). */
+    private fun cancelArrival(now: Long, out: MutableList<EngineAction>) {
+        phase = Phase.DRIVING
+        if (departedAt == null) departedAt = now // 출발 전에 도착을 알렸던 경우
+        navArrived = false
+        arrivalSource = null
+        remainAtArrival = null
+        arrivedSeenParked = false
+        driveSinceArrived = null
+        stopReason = StopReason.NONE
+        pending.removeAll { it.situation == "arrive" }
+        resetStageCandidate()
+        stageToAnnounce = null
+        newRoute = false
+        stage = computeStage(now)
+        out += ArrivalCancelled
+    }
+
     /** 멈춤의 순간(명세 3.3). */
     private fun evaluateStop(now: Long, out: MutableList<EngineAction>) {
         if (phase == Phase.ARRIVED) return
@@ -537,6 +592,11 @@ class CompanionEngine(
         phase = Phase.ARRIVED
         stage = Stage.ARRIVED
         stopReason = StopReason.ARRIVED
+        arrivalSource = source
+        remainAtArrival = acceptedRemainSec
+        routeChangedSinceArrival = false
+        arrivedSeenParked = signals.motion == Motion.PARKED
+        driveSinceArrived = null
         stageToAnnounce = null
         resetStageCandidate()
         pending.clear()
@@ -839,6 +899,8 @@ class CompanionEngine(
         /** 남은 시간·거리가 이 안이고 P단이면 도착으로 본다. */
         const val ARRIVE_REMAIN_SEC = 60
         const val ARRIVE_REMAIN_METERS = 150
+        /** 남은 시간으로 도착을 본 뒤 남은 시간이 이만큼 넘게 다시 늘면 도착을 거둔다. */
+        const val REARM_REMAIN_INCREASE_SEC = 60
         /** P단 정차를 경유지로 보려면 남은 거리를 알 때 이보다 멀어야 한다. */
         const val WAYPOINT_MIN_REMAIN_METERS = 1_000
         /** 내비의 전체 시간이 이만큼(그리고 4분의 1) 넘게 늘면 새 경로로 본다. */

@@ -124,6 +124,24 @@ class AppFlowTest {
     }
 
     @Test
+    fun `도착 뒤 다시 달려 도착을 거두면 도착 뒤 자동 종료도 풀린다`() {
+        val c = app.container
+        c.trip.start(TripConfig(place = "큰딸 집"))
+        c.demoSource.update { it.copy(gear = Gear.DRIVE) }
+        idle(30)
+        c.demoSource.setNav { it.copy(remainSec = 40, remainMeters = 100) }
+        c.demoSource.update { it.copy(gear = Gear.PARK) } // 목적지 앞 약국에 잠깐 섰다
+        idle(2)
+        assertEquals(Phase.ARRIVED, snapshot().phase)
+        c.demoSource.update { it.copy(gear = Gear.DRIVE) }
+        idle(20)
+        assertEquals(Phase.DRIVING, snapshot().phase)
+        idle(11 * 60)
+        assertTrue("다시 달리는 동안에는 스스로 끝내지 않는다", c.trip.inProgress)
+        c.trip.end()
+    }
+
+    @Test
     fun `Gleo 의 다시 말씀드리기와 잠시 조용히를 브로드캐스트로 받는다`() {
         val c = app.container
         val receiver = GleoActionReceiver()
