@@ -412,6 +412,7 @@ class PleosSignalSource(context: Context) : VehicleSignalSource {
                                 }
                                 guarded("문 ${position.name}") {
                                     // 문 위치는 최솟값이 닫힘이다. 최솟값보다 크면 열린 것으로 본다.
+                                    // (2026-11-11 에뮬레이터: 가상 콘솔 Open → DOOR_POS 1 로 왔고, 열림으로 읽혀 알림이 났다)
                                     val closedAt = bounds[area]?.minValue ?: 0
                                     val set: (Int?) -> Unit = { pos ->
                                         _state.update { it.copy(doorOpen = it.doorOpen.with(position, pos?.let { p -> p > closedAt })) }
@@ -846,7 +847,11 @@ class PleosSignalSource(context: Context) : VehicleSignalSource {
             SeatPosition.REAR_RIGHT to WindowValue.ROW_2_RIGHT,
         )
 
-        /** 창문 위치를 0(닫힘)~100(완전히 열림)으로 바꾼다. 최솟값이 닫힘이다(AAOS WINDOW_POS 와 같은 뜻). */
+        /**
+         * 창문 위치를 0(닫힘)~100(완전히 열림)으로 바꾼다. 최솟값이 닫힘이다(AAOS WINDOW_POS 와 같은 뜻).
+         * 범위는 차마다 다르다: 2026-11-11 에뮬레이터에서는 가상 콘솔 40% 가 원시 값 4(0~10 눈금)로 왔고, 이 변환을 거쳐
+         * 기준(30%)을 넘어 창문 안내가 났다.
+         */
         fun openPercent(position: Int, min: Int, max: Int): Int {
             if (max <= min) return position.coerceIn(0, 100)
             return ((position - min) * 100 / (max - min)).coerceIn(0, 100)

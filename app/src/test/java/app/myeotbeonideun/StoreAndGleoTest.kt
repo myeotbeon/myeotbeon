@@ -187,6 +187,8 @@ class GleoTest {
     fun `창문 위치를 열림 퍼센트로 바꾼다`() {
         assertEquals(40, PleosSignalSource.openPercent(40, 0, 100))
         assertEquals(50, PleosSignalSource.openPercent(5, 0, 10))
+        // 2026-11-11 에뮬레이터 실측: 가상 콘솔 40% 가 원시 값 4(0~10 눈금)로 왔다 → 40%, 기준(30%)을 넘어 창문 안내가 났다
+        assertEquals(40, PleosSignalSource.openPercent(4, 0, 10))
         assertEquals(100, PleosSignalSource.openPercent(300, 0, 255))
         assertEquals(0, PleosSignalSource.openPercent(-3, 0, 100))
     }
