@@ -27,6 +27,7 @@ import app.myeotbeonideun.signal.SeatReading
 import app.myeotbeonideun.signal.SourceKind
 import app.myeotbeonideun.signal.SourceStatus
 import app.myeotbeonideun.speech.ListenState
+import app.myeotbeonideun.speech.SpeechResult
 import app.myeotbeonideun.ui.screens.CompanionUi
 import app.myeotbeonideun.ui.screens.DevPanelActions
 import app.myeotbeonideun.ui.screens.DevPanelUi
@@ -231,13 +232,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app), DevPanelActions {
 
     val companion: StateFlow<CompanionUi> =
         combine(
-            c.trip.ui, c.drivingRestricted, c.speech.lastSkipped, c.speech.engineMissing, c.vehicleSource.status,
-        ) { trip, restricted, skipped, noEngine, vehicleStatus ->
+            c.trip.ui, c.drivingRestricted, c.speech.lastSkip, c.speech.engineMissing, c.vehicleSource.status,
+        ) { trip, restricted, skip, noEngine, vehicleStatus ->
             if (trip == null) CompanionUi(active = false, restricted = restricted)
             else {
                 // 차량 신호로 도는데 신호를 하나도 얻지 못했다(체험 모드로 넘어가지 않는다). 운전자에게 한 줄로 알린다.
                 val noSignal = trip.sourceKind == SourceKind.VEHICLE && vehicleStatus == SourceStatus.UNAVAILABLE
-                companionUi(trip, restricted, skipped != null, noEngine, noSignal)
+                companionUi(trip, restricted, skip, noEngine, noSignal)
             }
         }.stateIn(viewModelScope, SharingStarted.Eagerly, CompanionUi())
 
@@ -253,7 +254,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app), DevPanelActions {
     private fun companionUi(
         trip: TripUi,
         restricted: Boolean,
-        speechSkipped: Boolean,
+        skip: SpeechResult?,
         noEngine: Boolean,
         noSignal: Boolean,
     ): CompanionUi {
@@ -276,10 +277,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app), DevPanelActions {
             who = text(R.string.companion_who, trip.config.honorific, trip.config.seat.label),
             place = trip.config.place,
             stage = stage,
+            // 소리를 내지 못한 말도 셋째 줄에 그대로 보인다(화면으로만 알림).
             lastLine = s.lastLine,
-            // 소리를 내지 못했으면(음성 엔진 없음, 통화 중 등) 그 사실을 운전자에게 한 줄로 알린다.
-            notice = s.driverNotice ?: statusNoticeRes(noEngine, noSignal, speechSkipped)?.let { text(it) },
+            notice = s.driverNotice,
             noticeUrgent = s.driverNotice != null && s.driverNoticeUrgent,
+            // 소리를 내지 못했으면(음성 엔진 없음, 내비 안내·통화 중 등) 그 까닭을 첫째 줄 자리에 한 줄로 알린다.
+            status = statusNoticeRes(noEngine, noSignal, skip)?.let { text(it) },
             quietMinutesLeft = s.quietUntilMs?.let { ceil((it - trip.nowMs) / 60_000.0).toInt().coerceAtLeast(1) },
             canEnd = !restricted,
             restricted = restricted,
@@ -431,14 +434,21 @@ class AppViewModel(app: Application) : AndroidViewModel(app), DevPanelActions {
         private const val DAY_MS = 24 * 60 * 60 * 1000L
 
         /**
-         * 엔진의 운전자 알림이 없을 때, 그 자리에 보일 앱 상태 한 줄(문자열 id). 없으면 null.
-         * 음성 엔진 없음 > 차량 신호 없음 > 소리 내지 못함 순.
+         * 동행 화면 첫째 줄 자리에 보일 앱 상태 한 줄(문자열 id). 없으면 null.
+         * 음성 엔진 없음 > 차량 신호 없음 > 마지막 말을 소리 내지 못한 까닭 순.
+         * 끊김·조용히는 알리지 않는다(운전자가 시켰거나 더 급한 말이 나갔다).
          */
-        internal fun statusNoticeRes(noEngine: Boolean, noSignal: Boolean, speechSkipped: Boolean): Int? = when {
+        internal fun statusNoticeRes(noEngine: Boolean, noSignal: Boolean, skip: SpeechResult?): Int? = when {
             noEngine -> R.string.companion_no_engine
             noSignal -> R.string.companion_no_signal
-            speechSkipped -> R.string.companion_speech_skipped
-            else -> null
+            else -> when (skip) {
+                SpeechResult.NAVIGATION_BUSY -> R.string.companion_skip_navigation
+                SpeechResult.CALL_BUSY -> R.string.companion_skip_call
+                SpeechResult.FOCUS_DENIED -> R.string.companion_skip_focus
+                SpeechResult.ENGINE_FAILED -> R.string.companion_skip_engine
+                SpeechResult.NO_ENGINE -> R.string.companion_no_engine
+                SpeechResult.SPOKEN, SpeechResult.INTERRUPTED, SpeechResult.SILENCED, null -> null
+            }
         }
 
         /** 위치 권한 이름(Pleos FusedLocation). 화면에서 권한을 물을 때 쓴다. */

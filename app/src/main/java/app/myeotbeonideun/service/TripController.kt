@@ -11,6 +11,7 @@ import app.myeotbeonideun.engine.DriverNotice
 import app.myeotbeonideun.engine.EngineAction
 import app.myeotbeonideun.engine.EngineParams
 import app.myeotbeonideun.engine.EngineSnapshot
+import app.myeotbeonideun.engine.Priority
 import app.myeotbeonideun.engine.Silence
 import app.myeotbeonideun.engine.Speak
 import app.myeotbeonideun.engine.model.TripConfig
@@ -19,6 +20,8 @@ import app.myeotbeonideun.signal.GeoPoint
 import app.myeotbeonideun.signal.NavEvent
 import app.myeotbeonideun.signal.SignalSource
 import app.myeotbeonideun.signal.SourceKind
+import app.myeotbeonideun.speech.AudioYield
+import app.myeotbeonideun.speech.SpeechResult
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -78,6 +81,7 @@ class TripController(private val context: Context, private val c: AppContainer) 
         if (saved.rememberArrival && saved.arrivalLat != null && saved.arrivalLon != null) {
             src.watchArrivalPoint(GeoPoint(saved.arrivalLat, saved.arrivalLon))
         }
+        c.speech.clearSkipStatus()
         c.speech.setAudioZone(settings.audioZoneId)
         perform(e.start(now()))
 
@@ -161,16 +165,20 @@ class TripController(private val context: Context, private val c: AppContainer) 
             when (action) {
                 is Speak -> {
                     val e = engine
-                    c.speech.speak(action.text, action.interrupt) { spoken ->
-                        // 기록은 실제로 소리 낸 말만 센다. 그새 동행이 끝났거나 바뀌었으면 버린다.
+                    // 급한 안전 알림(주행 중 문 열림 등)은 내비 안내·통화가 끝나기를 기다리지 않는다.
+                    val urgent = AudioYield.isUrgent(action.priority == Priority.SAFETY, action.situation)
+                    c.speech.speak(action.text, action.interrupt, urgent) { result ->
+                        // 말마다 결과(말함, 또는 건너뜀과 그 까닭)를 엔진에 돌려준다. 기록은 끝까지 소리 낸 말만 센다.
+                        // 그새 동행이 끝났거나 바뀌었으면 버린다.
                         if (e != null && engine === e) {
-                            e.onUtteranceResult(action.id, spoken)
+                            e.onUtteranceResult(action.id, result.spoken)
                             publish()
                         }
                     }
                 }
                 is DriverNotice -> if (action.urgent) c.speech.chime()
-                Silence -> c.speech.stop()
+                // '잠시 조용히': 하던 말을 멈춘다. 멈춘 말은 '조용히'로 건너뜀이 된다.
+                Silence -> c.speech.stop(SpeechResult.SILENCED)
                 // 도착(내비·목적지 근처·운전자가 알림): 도착 지점을 기억하고 10분 뒤 스스로 끝낼 시각을 잡는다.
                 is Arrived -> {
                     arrivedAtMs = now()

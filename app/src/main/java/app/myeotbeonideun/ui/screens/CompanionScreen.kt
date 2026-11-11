@@ -35,8 +35,10 @@ import app.myeotbeonideun.ui.theme.LocalAppColors
  * @property who 누구·어느 자리 ("어머니 · 뒷좌석 오른쪽")
  * @property place 어디 ("큰딸 집")
  * @property stage 어느 구간 ("절반쯤")
- * @property lastLine 마지막으로 한 안내
- * @property notice 운전자에게 알릴 한 줄(문·창문·안전띠). 있으면 마지막 안내 자리에 보인다
+ * @property lastLine 마지막으로 한 안내(소리 내지 못했어도 엔진이 하려던 말)
+ * @property notice 운전자에게 알릴 한 줄(문·창문·안전띠·조용히 해제). 있으면 마지막 안내 자리에 보인다
+ * @property status 앱 상태 한 줄(음성 엔진 없음, 차량 신호 없음, 마지막 말을 소리 내지 못한 까닭).
+ *   첫째 줄(누구·어느 자리) 자리에 보여, 셋째 줄의 마지막 안내는 그대로 읽을 수 있다(그래서 '화면으로만 알린다'가 맞다)
  * @property quietMinutesLeft '잠시 조용히'가 몇 분 남았는지. 조용히 중이 아니면 null
  * @property canEnd 동행을 끝낼 수 있는지(정차 중에만)
  */
@@ -48,6 +50,7 @@ data class CompanionUi(
     val lastLine: String? = null,
     val notice: String? = null,
     val noticeUrgent: Boolean = false,
+    val status: String? = null,
     val quietMinutesLeft: Int? = null,
     val canEnd: Boolean = false,
     val restricted: Boolean = false,
@@ -103,10 +106,15 @@ private fun ThreeLines(ui: CompanionUi, scale: Float, modifier: Modifier) {
     val line = AppType.line.scaled(scale)
     val hero = AppType.hero.scaled(scale)
     Column(modifier, verticalArrangement = Arrangement.spacedBy(22.dp, Alignment.CenterVertically)) {
-        // ① 누구·어느 자리. 급한 알림이 두 줄을 쓸 때는 이 줄을 내려, 글이 세 줄을 넘지 않게 한다.
+        // ① 누구·어느 자리. 앱 상태 한 줄(소리 내지 못한 까닭 등)이 있으면 그 자리에 대신 보인다.
+        //    급한 알림이 두 줄을 쓸 때는 이 줄을 내려, 글이 세 줄을 넘지 않게 한다.
         val urgent = ui.notice != null && ui.noticeUrgent
         if (!urgent) {
-            Text(ui.who, style = line, color = colors.textSoft, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            val status = ui.status
+            Text(
+                status ?: ui.who, style = line, color = if (status != null) colors.accent else colors.textSoft,
+                maxLines = 1, overflow = TextOverflow.Ellipsis,
+            )
         }
         // ② 어디·어느 구간 — 가는 곳 이름이 길어도 구간은 잘리지 않게 따로 둔다
         Row(verticalAlignment = Alignment.CenterVertically) {

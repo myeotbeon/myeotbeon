@@ -26,7 +26,11 @@
     <string name="companion_idle_driving">차를 세운 뒤 출발 전 설정에서 시작하세요</string>
     <string name="companion_go_setup">출발 전 설정으로</string>
     <string name="companion_no_engine">음성 엔진이 없어 화면으로만 알려요</string>
-    <string name="companion_speech_skipped">통화·안내 중이라 화면으로만 알렸어요</string>
+    <!-- 마지막 말을 소리 내지 못한 까닭(그 말은 셋째 줄에 그대로 보인다) -->
+    <string name="companion_skip_navigation">내비 안내 중이라 소리 내지 않았어요</string>
+    <string name="companion_skip_call">통화 중이라 소리 내지 않았어요</string>
+    <string name="companion_skip_focus">다른 소리가 나는 중이라 소리 내지 않았어요</string>
+    <string name="companion_skip_engine">음성 엔진이 읽지 못해 소리 내지 않았어요</string>
     <string name="companion_no_signal">차량 신호가 없어 먼저 말하지 않아요</string>
     <string name="stage_ready">출발 전</string>
     <string name="stage_just_departed">방금 출발</string>

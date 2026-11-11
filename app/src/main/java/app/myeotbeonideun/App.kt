@@ -12,6 +12,7 @@ import app.myeotbeonideun.signal.SignalSource
 import app.myeotbeonideun.signal.VehicleSignalSource
 import app.myeotbeonideun.speech.PassengerListener
 import app.myeotbeonideun.speech.PleosPassengerListener
+import app.myeotbeonideun.speech.Speaker
 import app.myeotbeonideun.speech.SpeechController
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -44,17 +45,23 @@ open class App : Application() {
  *
  * @param isAutomotive 차량용 기기(AAOS)인지. 아니면 차량 서비스에 붙으려 하지 않고 체험 모드로만 돈다.
  * @param vehicleSource 실차 신호(시험에서는 가짜)
+ * @param speakers 음성 엔진(시험에서는 가짜). null 이면 Pleos TTS → 안드로이드 TTS
+ * @param activeUsages 지금 재생 중인 소리의 용도(시험에서는 가짜). null 이면 AudioManager 에서 읽는다
  */
 class AppContainer(
     private val app: Application,
     val isAutomotive: Boolean = app.packageManager.hasSystemFeature(PackageManager.FEATURE_AUTOMOTIVE),
     val vehicleSource: VehicleSignalSource = PleosSignalSource(app),
+    speakers: List<Speaker>? = null,
+    activeUsages: (() -> List<Int>)? = null,
 ) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     val store = AppStore(app)
     val demoSource = DemoSignalSource(scope)
-    val speech = SpeechController(app, scope)
+    val speech =
+        if (speakers != null) SpeechController(app, scope, speakers, activeUsages)
+        else SpeechController(app, scope, activeUsages = activeUsages)
     val listener: PassengerListener = PleosPassengerListener(app)
 
     /** 미리 써 둔 고정 대본. 실행 중에 문장을 만들지 않는다. */

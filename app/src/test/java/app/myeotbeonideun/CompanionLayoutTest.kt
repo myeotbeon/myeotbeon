@@ -6,9 +6,13 @@ import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.text.TextLayoutResult
 import app.myeotbeonideun.ui.screens.CompanionScreen
 import app.myeotbeonideun.ui.screens.CompanionUi
@@ -133,6 +137,31 @@ class CompanionLayoutTest {
     fun `잠시 조용히 중에도 글 세 줄과 버튼 둘이다`() {
         show(driving.copy(quietMinutesLeft = 9))
         assertEquals(3, textLines())
+        assertEquals(2, buttons())
+    }
+
+    @Test
+    fun `소리 내지 못한 까닭은 첫째 줄 자리에 보이고 하려던 말도 남아 세 줄이다`() {
+        show(driving.copy(status = "내비 안내 중이라 소리 내지 않았어요"))
+        assertEquals(3, textLines())
+        assertEquals(2, buttons())
+        compose.onNodeWithText("내비 안내 중이라 소리 내지 않았어요").assertIsDisplayed()
+        compose.onNodeWithText("“어머니, 절반쯤 왔어요. 큰딸 집에 가고 있어요.”").assertIsDisplayed()
+        compose.onAllNodesWithText("어머니 · 뒷좌석 오른쪽").assertCountEquals(0)
+    }
+
+    @Test
+    fun `까닭 표시와 알림 한 줄이 함께여도 세 줄이다`() {
+        show(driving.copy(status = "통화 중이라 소리 내지 않았어요", notice = "같이 탄 분 쪽 창문이 열렸어요."))
+        assertEquals(3, textLines())
+        compose.onNodeWithText("통화 중이라 소리 내지 않았어요").assertIsDisplayed()
+    }
+
+    @Test
+    fun `급한 알림이 뜨면 까닭 표시는 내리고 세 줄을 넘지 않는다`() {
+        show(driving.copy(status = "통화 중이라 소리 내지 않았어요", notice = "같이 탄 분 쪽 문이 열렸어요.", noticeUrgent = true))
+        assertTrue(textLines() <= 3)
+        compose.onAllNodesWithText("통화 중이라 소리 내지 않았어요").assertCountEquals(0)
         assertEquals(2, buttons())
     }
 

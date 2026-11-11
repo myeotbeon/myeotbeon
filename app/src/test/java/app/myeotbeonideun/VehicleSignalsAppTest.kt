@@ -18,6 +18,7 @@ import app.myeotbeonideun.engine.model.VehicleState
 import app.myeotbeonideun.signal.Capabilities
 import app.myeotbeonideun.signal.SourceKind
 import app.myeotbeonideun.signal.SourceStatus
+import app.myeotbeonideun.speech.SpeechResult
 import app.myeotbeonideun.ui.AppViewModel
 import app.myeotbeonideun.ui.MainActivity
 import app.myeotbeonideun.ui.Screen
@@ -63,11 +64,14 @@ class VehicleSourceChoiceTest {
         c.trip.start(TripConfig(place = "큰딸 집"))
         idle()
         assertEquals(SourceKind.VEHICLE, c.trip.ui.value!!.sourceKind)
+        // 앱 상태 한 줄은 첫째 줄(누구·어느 자리) 자리에 보이고, 셋째 줄에는 하려던 말이 그대로 남는다
         val expected = if (c.speech.engineMissing.value) "음성 엔진이 없어 화면으로만 알려요" else "차량 신호가 없어 먼저 말하지 않아요"
-        assertEquals(expected, vm.companion.value.notice)
-        assertEquals(R.string.companion_no_signal, AppViewModel.statusNoticeRes(noEngine = false, noSignal = true, speechSkipped = true))
-        assertEquals(R.string.companion_no_engine, AppViewModel.statusNoticeRes(noEngine = true, noSignal = true, speechSkipped = false))
-        assertEquals(null, AppViewModel.statusNoticeRes(noEngine = false, noSignal = false, speechSkipped = false))
+        assertEquals(expected, vm.companion.value.status)
+        assertEquals(null, vm.companion.value.notice)
+        assertTrue(vm.companion.value.lastLine!!.startsWith("어머니,"))
+        assertEquals(R.string.companion_no_signal, AppViewModel.statusNoticeRes(noEngine = false, noSignal = true, skip = SpeechResult.CALL_BUSY))
+        assertEquals(R.string.companion_no_engine, AppViewModel.statusNoticeRes(noEngine = true, noSignal = true, skip = null))
+        assertEquals(null, AppViewModel.statusNoticeRes(noEngine = false, noSignal = false, skip = null))
         c.trip.end()
 
         // 신호가 돌아오면 그대로 차량 신호로 돈다
