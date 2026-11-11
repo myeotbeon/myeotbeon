@@ -107,6 +107,22 @@ object SupportedAreas {
      */
     fun <A, V> pick(supported: Collection<A>, value: V, contains: (A, V) -> Boolean, whenUnlisted: (V) -> A): A? =
         if (supported.isEmpty()) whenUnlisted(value) else supported.firstOrNull { contains(it, value) }
+
+    /**
+     * 여러 자리를 한꺼번에 고른다([pick] 을 자리마다). 다만 목록이 있는데 어느 자리도 맞지 않으면 영역 표기를
+     * 잘못 읽은 것으로 보고, 예전처럼 자리마다 그 자리 하나로 시도한다(목록 해석이 틀려 신호를 통째로 잃지 않게).
+     * @return 자리 순서대로의 영역(등록하지 않을 자리는 null)과, 그렇게 되돌렸는지
+     */
+    fun <A, V> pickAll(supported: Collection<A>, values: List<V>, contains: (A, V) -> Boolean, whenUnlisted: (V) -> A): Picked<A> {
+        val picked = values.map { pick(supported, it, contains, whenUnlisted) }
+        return if (supported.isNotEmpty() && values.isNotEmpty() && picked.all { it == null }) {
+            Picked(values.map(whenUnlisted), fellBack = true)
+        } else {
+            Picked(picked, fellBack = false)
+        }
+    }
+
+    data class Picked<A>(val areas: List<A?>, val fellBack: Boolean)
 }
 
 /** check*Capabilities 등이 실패했을 때 다시 시도하는 간격(지수 간격, 세 번까지). */

@@ -285,8 +285,11 @@ class PleosSignalSource(context: Context) : VehicleSignalSource {
                             }
                             note("좌석 점유: 지원(영역 ${areas.size}곳)")
                             capable { copy(seatOccupancy = true) }
-                            for ((position, value) in SEATS) {
-                                val area = SupportedAreas.pick(areas, value, { a, x -> x in a.values }) { SeatArea(it) }
+                            val picked = SupportedAreas.pickAll(areas, SEATS.map { it.second }, { a, x -> x in a.values }) { SeatArea(it) }
+                            if (picked.fellBack) note("좌석 점유: 지원 영역 목록과 자리가 맞지 않아 네 자리를 모두 시도")
+                            for ((i, seatValue) in SEATS.withIndex()) {
+                                val position = seatValue.first
+                                val area = picked.areas[i]
                                 if (area == null) {
                                     note("좌석 점유 ${position.name}: 지원 영역이 아니어서 등록하지 않음")
                                     continue
@@ -339,9 +342,12 @@ class PleosSignalSource(context: Context) : VehicleSignalSource {
                             }
                             note("안전띠: 지원(영역 ${areas.size}곳)")
                             capable { copy(seatBelt = true) }
-                            for ((position, value) in SEATS) {
-                                if (position == SeatPosition.DRIVER) continue
-                                val area = SupportedAreas.pick(areas, value, { a, x -> x in a.values }) { SeatArea(it) }
+                            val seats = SEATS.filter { it.first != SeatPosition.DRIVER }
+                            val picked = SupportedAreas.pickAll(areas, seats.map { it.second }, { a, x -> x in a.values }) { SeatArea(it) }
+                            if (picked.fellBack) note("안전띠: 지원 영역 목록과 자리가 맞지 않아 세 자리를 모두 시도")
+                            for ((i, seatValue) in seats.withIndex()) {
+                                val position = seatValue.first
+                                val area = picked.areas[i]
                                 if (area == null) {
                                     note("안전띠 ${position.name}: 지원 영역이 아니어서 등록하지 않음")
                                     continue
@@ -395,8 +401,11 @@ class PleosSignalSource(context: Context) : VehicleSignalSource {
                             }
                             note("문: 지원(영역 ${bounds.size}곳)")
                             capable { copy(door = true) }
-                            for ((position, value) in DOORS) {
-                                val area = SupportedAreas.pick(bounds.keys, value, { a, x -> x in a.values }) { DoorArea(it) }
+                            val picked = SupportedAreas.pickAll(bounds.keys, DOORS.map { it.second }, { a, x -> x in a.values }) { DoorArea(it) }
+                            if (picked.fellBack) note("문: 지원 영역 목록과 자리가 맞지 않아 네 자리를 모두 시도")
+                            for ((i, doorValue) in DOORS.withIndex()) {
+                                val position = doorValue.first
+                                val area = picked.areas[i]
                                 if (area == null) {
                                     note("문 ${position.name}: 지원 영역이 아니어서 등록하지 않음")
                                     continue
@@ -452,9 +461,12 @@ class PleosSignalSource(context: Context) : VehicleSignalSource {
                             }
                             note("창문: 지원(영역 ${bounds.size}곳)")
                             capable { copy(window = true) }
-                            for ((position, value) in WINDOWS) {
-                                if (position == SeatPosition.DRIVER) continue
-                                val area = SupportedAreas.pick(bounds.keys, value, { a, x -> x in a.values }) { WindowArea(it) }
+                            val windows = WINDOWS.filter { it.first != SeatPosition.DRIVER }
+                            val picked = SupportedAreas.pickAll(bounds.keys, windows.map { it.second }, { a, x -> x in a.values }) { WindowArea(it) }
+                            if (picked.fellBack) note("창문: 지원 영역 목록과 자리가 맞지 않아 세 자리를 모두 시도")
+                            for ((i, windowValue) in windows.withIndex()) {
+                                val position = windowValue.first
+                                val area = picked.areas[i]
                                 if (area == null) {
                                     note("창문 ${position.name}: 지원 영역이 아니어서 등록하지 않음")
                                     continue

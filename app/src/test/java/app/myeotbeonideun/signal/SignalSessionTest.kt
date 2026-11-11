@@ -129,4 +129,26 @@ class SignalSessionTest {
         // 차가 목록을 비워 주면 그 자리 하나로 시도한다
         assertEquals(Area(setOf(0x40)), SupportedAreas.pick(emptyList(), 0x40, { a, v -> v in a.values }) { Area(setOf(it)) })
     }
+
+    @Test
+    fun `여러 자리를 고를 때 목록에 없는 자리만 빼고, 하나도 맞지 않으면 예전처럼 모두 시도한다`() {
+        data class Area(val values: Set<Int>)
+        val contains = { a: Area, v: Int -> v in a.values }
+        val make = { v: Int -> Area(setOf(v)) }
+        // 에뮬레이터처럼 문 6곳(앞뒤 좌우 + 후드·트렁크) 가운데 네 자리
+        val doors = listOf(Area(setOf(0x1)), Area(setOf(0x4)), Area(setOf(0x10)), Area(setOf(0x40)), Area(setOf(0x10000000)), Area(setOf(0x20000000)))
+        val all = SupportedAreas.pickAll(doors, listOf(0x1, 0x4, 0x10, 0x40), contains, make)
+        assertFalse(all.fellBack)
+        assertEquals(listOf(Area(setOf(0x1)), Area(setOf(0x4)), Area(setOf(0x10)), Area(setOf(0x40))), all.areas)
+
+        // 뒷좌석이 없는 차: 그 자리만 빠진다
+        val twoSeats = SupportedAreas.pickAll(listOf(Area(setOf(0x1)), Area(setOf(0x4))), listOf(0x1, 0x4, 0x10, 0x40), contains, make)
+        assertFalse(twoSeats.fellBack)
+        assertEquals(listOf(Area(setOf(0x1)), Area(setOf(0x4)), null, null), twoSeats.areas)
+
+        // 영역 표기가 예상과 달라 어느 자리도 맞지 않으면 목록을 믿지 않고 자리마다 시도한다
+        val mismatch = SupportedAreas.pickAll(listOf(Area(setOf(1001)), Area(setOf(1002))), listOf(0x1, 0x4), contains, make)
+        assertTrue(mismatch.fellBack)
+        assertEquals(listOf(Area(setOf(0x1)), Area(setOf(0x4))), mismatch.areas)
+    }
 }
