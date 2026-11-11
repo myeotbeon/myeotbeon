@@ -74,6 +74,9 @@ adb 로 차량용이 아닌 기기에 설치하면 체험 모드로만 돌도록
 가상 콘솔로 시연하는 순서는 [`docs/demo.md`](docs/demo.md)에, 그 순서를 단계마다 가상 콘솔에 보내는 시연 도우미는
 [`tools/demo_console.py`](tools/demo_console.py)(HTTP 만 쓰고 adb 는 쓰지 않음, `python tools/demo_console.py`)에 있습니다.
 
+에뮬레이터에서 녹화한 시연 영상(2분 54초)은 [`docs/demo.mp4`](docs/demo.mp4)입니다. 화면과 소리는 에뮬레이터 그대로이고, 차량 신호는 가상 콘솔로 넣었습니다.
+1장은 `apk/` 의 release APK, 2장(정차·운전자 이탈·도착·기록)은 바로 앞 빌드로 찍었고, 자른 곳은 화면에 '생략'으로 표시했습니다.
+
 릴리스 서명 값은 저장소 밖의 `keystore.properties`(storeFile, storePassword, keyAlias, keyPassword)에서 읽습니다.
 위치는 `-Pmyeotbeon.signing=<파일>`, 환경변수 `MYEOTBEON_SIGNING`, `local.properties` 의 `myeotbeon.signing=<파일>`,
 프로젝트 루트의 `keystore.properties` 순으로 찾습니다. 없으면 서명 없는 release 가 만들어집니다.
@@ -265,7 +268,7 @@ app/      안드로이드 앱
   service/  동행 진행(TripController), 포그라운드 서비스, 알림
   gleo/     Gleo 함수 수신과 응답, 연속 호출 제한
   ui/       Compose 화면
-docs/     architecture.md, signals.md, demo.md, privacy.md, screens/
+docs/     architecture.md, signals.md, demo.md, demo.mp4(시연 영상), privacy.md, screens/
 tools/    demo_console.py(가상 콘솔 시연 도우미)
 apk/      제출용 release APK
 ```
