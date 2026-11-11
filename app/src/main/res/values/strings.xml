@@ -21,6 +21,8 @@
     <string name="companion_quiet_cancel">다시 말하게 하기</string>
     <string name="companion_quiet_left">조용히 %1$d분 남음</string>
     <string name="companion_end">동행 끝내기</string>
+    <string name="companion_arrived">도착했어요</string>
+    <string name="companion_ending_after_arrival">도착 안내가 끝나면 동행을 마쳐요</string>
     <string name="companion_idle_title">동행 중이 아니에요</string>
     <string name="companion_idle_parked">출발 전 설정에서 동행을 시작하세요</string>
     <string name="companion_idle_driving">차를 세운 뒤 출발 전 설정에서 시작하세요</string>

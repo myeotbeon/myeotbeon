@@ -87,8 +87,12 @@ class AppStore(context: Context) {
         return saved!!
     }
 
-    fun setArrivalPoint(routeId: String, lat: Double, lon: Double) {
-        _routes.update { list -> list.map { if (it.id == routeId) it.copy(arrivalLat = lat, arrivalLon = lon) else it } }
+    /** 그 길의 도착 지점을 정한다. null 이면 지운다(도착을 거둬 그 전 값으로 되돌릴 때). */
+    fun setArrivalPoint(routeId: String, lat: Double?, lon: Double?) {
+        val point = if (lat != null && lon != null) lat to lon else null
+        _routes.update { list ->
+            list.map { if (it.id == routeId) it.copy(arrivalLat = point?.first, arrivalLon = point?.second) else it }
+        }
         persistRoutes()
     }
 

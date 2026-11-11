@@ -41,6 +41,7 @@ import app.myeotbeonideun.ui.theme.LocalAppColors
  *   첫째 줄(누구·어느 자리) 자리에 보여, 셋째 줄의 마지막 안내는 그대로 읽을 수 있다(그래서 '화면으로만 알린다'가 맞다)
  * @property quietMinutesLeft '잠시 조용히'가 몇 분 남았는지. 조용히 중이 아니면 null
  * @property canEnd 동행을 끝낼 수 있는지(정차 중에만)
+ * @property canConfirmArrival '도착했어요'를 보일지(정차 중이고 출발한 뒤 아직 도착 전일 때만 — 주행 중에는 보이지 않는다)
  */
 data class CompanionUi(
     val active: Boolean = false,
@@ -53,6 +54,7 @@ data class CompanionUi(
     val status: String? = null,
     val quietMinutesLeft: Int? = null,
     val canEnd: Boolean = false,
+    val canConfirmArrival: Boolean = false,
     val restricted: Boolean = false,
 )
 
@@ -61,6 +63,9 @@ data class CompanionUi(
  *
  * 글은 세 줄 이하(누구·어느 자리 / 어디·어느 구간 / 마지막 안내), 큰 버튼은 둘뿐이다.
  * 스크롤, 움직이는 그림, 긴 글, 글자 입력이 없다. 1~2초 안에 읽고 한 손으로 누른다.
+ * 정차 중에만 아래 줄에 '도착했어요'(주 버튼, 도착 전일 때)와 '동행 끝내기'(보조)가 더해진다.
+ *
+ * @param onArrived '도착했어요': 도착을 알리고, 안내가 끝나면 동행을 마친다
  */
 @Composable
 fun CompanionScreen(
@@ -70,6 +75,7 @@ fun CompanionScreen(
     onEnd: () -> Unit,
     onGoSetup: () -> Unit,
     modifier: Modifier = Modifier,
+    onArrived: () -> Unit = {},
 ) {
     if (!ui.active) {
         IdleCompanion(ui.restricted, onGoSetup, modifier)
@@ -87,14 +93,14 @@ fun CompanionScreen(
                     verticalArrangement = Arrangement.spacedBy(24.dp, Alignment.CenterVertically),
                 ) {
                     TwoButtons(ui, onRepeat, onQuiet, Modifier.weight(1f))
-                    EndButton(ui, onEnd)
+                    ParkedButtons(ui, onArrived, onEnd)
                 }
             }
         } else {
             Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(24.dp)) {
                 ThreeLines(ui, scale, Modifier.weight(1f).fillMaxWidth())
                 TwoButtons(ui, onRepeat, onQuiet, Modifier.weight(1.1f))
-                EndButton(ui, onEnd)
+                ParkedButtons(ui, onArrived, onEnd)
             }
         }
     }
@@ -173,18 +179,32 @@ private fun TwoButtons(ui: CompanionUi, onRepeat: () -> Unit, onQuiet: () -> Uni
 private fun TextStyle.scaled(scale: Float): TextStyle =
     if (scale == 1f) this else copy(fontSize = fontSize * scale, lineHeight = lineHeight * scale)
 
-/** 동행 끝내기는 정차 중에만 보인다. 주행 중에는 큰 버튼 둘만 남는다. */
+/**
+ * 정차 중에만 보이는 아래 줄: '도착했어요'(주 버튼, 출발한 뒤 도착 전일 때)와 '동행 끝내기'(보조).
+ * 주행 중에는 큰 버튼 둘만 남는다.
+ */
 @Composable
-private fun EndButton(ui: CompanionUi, onEnd: () -> Unit) {
+private fun ParkedButtons(ui: CompanionUi, onArrived: () -> Unit, onEnd: () -> Unit) {
     if (!ui.canEnd) return
-    BigButton(
-        text = stringResource(R.string.companion_end),
-        onClick = onEnd,
-        primary = false,
-        minHeight = 72.dp,
-        textStyle = AppType.body,
-        modifier = Modifier.fillMaxWidth(),
-    )
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+        if (ui.canConfirmArrival) {
+            BigButton(
+                text = stringResource(R.string.companion_arrived),
+                onClick = onArrived,
+                minHeight = 88.dp,
+                textStyle = AppType.title,
+                modifier = Modifier.weight(1.3f),
+            )
+        }
+        BigButton(
+            text = stringResource(R.string.companion_end),
+            onClick = onEnd,
+            primary = false,
+            minHeight = if (ui.canConfirmArrival) 88.dp else 72.dp,
+            textStyle = AppType.body,
+            modifier = Modifier.weight(1f),
+        )
+    }
 }
 
 @Composable

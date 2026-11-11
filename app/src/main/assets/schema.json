@@ -8,10 +8,15 @@
       "type": "function",
       "function": {
         "name": "REPEAT_TRIP_ANSWER",
-        "description": "Tell the passenger again, by voice, where the car is going and how far along the trip is.",
+        "description": "Tell the passenger again, by voice, where the car is going and how far along the trip is, or that the car has arrived.",
         "parameters": {
           "type": "object",
-          "properties": {},
+          "properties": {
+            "arrived": {
+              "type": "boolean",
+              "description": "True only when the driver says the car has reached the destination; the passenger is then told about the arrival and the ride companion ends."
+            }
+          },
           "required": []
         },
         "component": "service"

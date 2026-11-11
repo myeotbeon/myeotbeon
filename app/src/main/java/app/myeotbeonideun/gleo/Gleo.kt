@@ -6,6 +6,7 @@ import android.content.Intent
 import app.myeotbeonideun.App
 import app.myeotbeonideun.AppContainer
 import app.myeotbeonideun.data.SavedRoute
+import app.myeotbeonideun.service.ArrivalConfirm
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -39,6 +40,9 @@ object Gleo {
     const val ACTION_START = "START_COMPANION_TRIP"
 
     const val EXTRA_PARAM = "ACTION_PARAM"
+
+    /** REPEAT_TRIP_ANSWER 의 선택 파라미터(boolean): 운전자가 도착했다고 말했다. */
+    const val PARAM_ARRIVED = "arrived"
     private const val RESPONSE_ACTION = "ai.pleos.playground.intent.action.APP_ACTION_RESPONSE"
 
     const val STATUS_SUCCESS = "success"
@@ -91,6 +95,27 @@ object Gleo {
             respond(context, ACTION_REPEAT, STATUS_SUCCESS, "The passenger was told again by voice.", MODE_SILENT)
         } else {
             respond(context, ACTION_REPEAT, STATUS_FAIL, "No companion trip is in progress.")
+        }
+    }
+
+    /**
+     * "다 왔다고 말씀드려 줘"(REPEAT_TRIP_ANSWER 에 arrived = true, 결함 2). 화면의 '도착했어요'와 같다.
+     * 함수는 최대 3개라(App Schema 가이드) 새 함수를 두지 않고 '다시 말씀드리기'의 선택 파라미터로 받는다.
+     * 정차(P단) 중에만 받는다. 달리는 중에 "다 왔어요"라고 하지 않는다.
+     */
+    fun handleArrived(context: Context, container: AppContainer) {
+        when (container.trip.confirmArrival()) {
+            ArrivalConfirm.CONFIRMED, ArrivalConfirm.ALREADY_ARRIVED -> respond(
+                context, ACTION_REPEAT, STATUS_SUCCESS,
+                "The passenger was told by voice that the car has arrived, and the ride companion is ending.", MODE_SILENT,
+            )
+            ArrivalConfirm.NO_TRIP -> respond(context, ACTION_REPEAT, STATUS_FAIL, "No companion trip is in progress.")
+            ArrivalConfirm.NOT_PARKED -> respond(
+                context, ACTION_REPEAT, STATUS_FAIL, "Arrival can only be told to the passenger after the car is parked.",
+            )
+            ArrivalConfirm.NOT_DEPARTED -> respond(
+                context, ACTION_REPEAT, STATUS_FAIL, "The car has not departed yet, so it has not arrived.",
+            )
         }
     }
 
@@ -180,7 +205,9 @@ class GleoActionReceiver : BroadcastReceiver() {
         val container = (context.applicationContext as? App)?.container ?: return
         val params = GleoParams.parse(intent.getStringExtra(Gleo.EXTRA_PARAM))
         when (intent.action) {
-            Gleo.ACTION_REPEAT -> Gleo.handleRepeat(context, container)
+            Gleo.ACTION_REPEAT ->
+                if (params.optBoolean(Gleo.PARAM_ARRIVED, false)) Gleo.handleArrived(context, container)
+                else Gleo.handleRepeat(context, container)
             Gleo.ACTION_PAUSE -> Gleo.handlePause(context, container, params)
         }
     }

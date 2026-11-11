@@ -13,6 +13,7 @@ import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.text.TextLayoutResult
 import app.myeotbeonideun.ui.screens.CompanionScreen
 import app.myeotbeonideun.ui.screens.CompanionUi
@@ -131,6 +132,44 @@ class CompanionLayoutTest {
         show(driving.copy(restricted = false, canEnd = true))
         assertEquals(3, buttons())
         assertTrue(textLines() <= 3)
+    }
+
+    @Test
+    fun `정차 중 도착 전이면 도착했어요와 동행 끝내기가 더해지고 누르면 알린다`() {
+        var arrived = 0
+        var ended = 0
+        compose.setContent {
+            MyeotbeonTheme(dark = true) {
+                CompanionScreen(driving.copy(restricted = false, canEnd = true, canConfirmArrival = true), {}, {}, { ended++ }, {}, onArrived = { arrived++ })
+            }
+        }
+        compose.waitForIdle()
+        assertEquals("다시 말씀드리기·잠시 조용히·도착했어요·동행 끝내기", 4, buttons())
+        assertTrue(textLines() <= 3)
+        assertEquals(0, scrollables())
+        compose.onNodeWithText("도착했어요").assertIsDisplayed().performClick()
+        compose.onNodeWithText("동행 끝내기").assertIsDisplayed().performClick()
+        assertEquals(1, arrived)
+        assertEquals(1, ended)
+    }
+
+    @Test
+    fun `주행 중에는 도착했어요가 보이지 않는다`() {
+        // 화면 상태가 잘못 와도(주행 중인데 canConfirmArrival) 정차 중이 아니면 그리지 않는다
+        show(driving.copy(canConfirmArrival = true))
+        assertEquals(2, buttons())
+        compose.onAllNodesWithText("도착했어요").assertCountEquals(0)
+        compose.onAllNodesWithText("동행 끝내기").assertCountEquals(0)
+    }
+
+    @Test
+    @Config(qualifiers = PORTRAIT)
+    fun `세로 창에서도 도착했어요와 동행 끝내기가 한 줄에 들어간다`() {
+        show(driving.copy(restricted = false, canEnd = true, canConfirmArrival = true))
+        assertEquals(4, buttons())
+        assertEquals(0, scrollables())
+        compose.onNodeWithText("도착했어요").assertIsDisplayed()
+        compose.onNodeWithText("동행 끝내기").assertIsDisplayed()
     }
 
     @Test

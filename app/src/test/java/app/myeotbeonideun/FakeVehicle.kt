@@ -3,6 +3,7 @@ package app.myeotbeonideun
 import app.myeotbeonideun.engine.model.SeatPosition
 import app.myeotbeonideun.engine.model.VehicleState
 import app.myeotbeonideun.signal.Capabilities
+import app.myeotbeonideun.signal.GeoPoint
 import app.myeotbeonideun.signal.NavEvent
 import app.myeotbeonideun.signal.SeatReading
 import app.myeotbeonideun.signal.SeatValueReader
@@ -65,6 +66,16 @@ open class FakeVehicleSource : VehicleSignalSource {
 
     override fun refreshSpeedPermission() {
         speedRefreshes++
+    }
+
+    /** [lastKnownLocation] 이 돌려줄 위치(FusedLocation 대신). */
+    var location: GeoPoint? = null
+    var locationRequests = 0
+        private set
+
+    override fun lastKnownLocation(onResult: (GeoPoint?) -> Unit) {
+        locationRequests++
+        onResult(location)
     }
 
     /** SDK 가 넘기는 것처럼 한 자리의 좌석 점유 원시 값을 넣는다. */

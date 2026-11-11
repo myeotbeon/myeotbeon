@@ -127,6 +127,7 @@ fun MyeotbeonApp(
         when (screen) {
             Screen.COMPANION -> CompanionScreen(
                 companion, vm::repeat, vm::toggleQuiet, vm::endTrip, { vm.navigate(Screen.SETUP) },
+                onArrived = vm::confirmArrival,
             )
 
             Screen.CARD -> {
@@ -176,6 +177,7 @@ fun MyeotbeonApp(
                         CompanionScreen(
                             companion, vm::repeat, vm::toggleQuiet, vm::endTrip, { vm.navigate(Screen.SETUP) },
                             modifier = Modifier.weight(1.25f).fillMaxHeight(),
+                            onArrived = vm::confirmArrival,
                         )
                     }
                     DevPanelScreen(dev, vm, Modifier.weight(1f).fillMaxHeight())

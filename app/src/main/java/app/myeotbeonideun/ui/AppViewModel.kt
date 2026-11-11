@@ -251,6 +251,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app), DevPanelActions {
     fun toggleQuiet() { c.trip.toggleQuiet() }
     fun endTrip() = c.trip.end()
 
+    /** '도착했어요'(정차 중에만 보인다). 도착을 알리고, 안내가 끝나면 동행을 마친다. */
+    fun confirmArrival() { c.trip.confirmArrival() }
+
     private fun companionUi(
         trip: TripUi,
         restricted: Boolean,
@@ -282,9 +285,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app), DevPanelActions {
             notice = s.driverNotice,
             noticeUrgent = s.driverNotice != null && s.driverNoticeUrgent,
             // 소리를 내지 못했으면(음성 엔진 없음, 내비 안내·통화 중 등) 그 까닭을 첫째 줄 자리에 한 줄로 알린다.
-            status = statusNoticeRes(noEngine, noSignal, skip)?.let { text(it) },
+            // '도착했어요'를 누른 뒤에는 곧 동행을 마친다는 것을 알린다.
+            status = statusNoticeRes(noEngine, noSignal, skip, trip.endingAfterArrival)?.let { text(it) },
             quietMinutesLeft = s.quietUntilMs?.let { ceil((it - trip.nowMs) / 60_000.0).toInt().coerceAtLeast(1) },
             canEnd = !restricted,
+            // '도착했어요'는 정차 중(화면 잠금이 아님)이고 엔진이 받을 수 있을 때(출발 뒤·도착 전·P단)만.
+            canConfirmArrival = !restricted && s.canConfirmArrival && !trip.endingAfterArrival,
             restricted = restricted,
         )
     }
@@ -435,12 +441,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app), DevPanelActions {
 
         /**
          * 동행 화면 첫째 줄 자리에 보일 앱 상태 한 줄(문자열 id). 없으면 null.
-         * 음성 엔진 없음 > 차량 신호 없음 > 마지막 말을 소리 내지 못한 까닭 순.
+         * 음성 엔진 없음 > 차량 신호 없음 > '도착했어요' 뒤 곧 마침 > 마지막 말을 소리 내지 못한 까닭 순.
          * 끊김·조용히는 알리지 않는다(운전자가 시켰거나 더 급한 말이 나갔다).
          */
-        internal fun statusNoticeRes(noEngine: Boolean, noSignal: Boolean, skip: SpeechResult?): Int? = when {
+        internal fun statusNoticeRes(
+            noEngine: Boolean,
+            noSignal: Boolean,
+            skip: SpeechResult?,
+            endingAfterArrival: Boolean = false,
+        ): Int? = when {
             noEngine -> R.string.companion_no_engine
             noSignal -> R.string.companion_no_signal
+            endingAfterArrival -> R.string.companion_ending_after_arrival
             else -> when (skip) {
                 SpeechResult.NAVIGATION_BUSY -> R.string.companion_skip_navigation
                 SpeechResult.CALL_BUSY -> R.string.companion_skip_call

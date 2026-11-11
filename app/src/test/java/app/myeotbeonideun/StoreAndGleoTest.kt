@@ -128,6 +128,21 @@ class GleoTest {
     }
 
     @Test
+    fun `다시 말씀드리기는 도착을 알리는 선택 파라미터(boolean)를 받는다`() {
+        // 함수는 최대 3개(App Schema 가이드)라 '다 왔다고 말씀드려 줘'는 새 함수가 아니라 이 파라미터로 받는다.
+        val schema = JSONObject(context.assets.open("schema.json").bufferedReader().use { it.readText() })
+        val calls = schema.getJSONArray("actionCalls")
+        val repeat = (0 until calls.length()).map { calls.getJSONObject(it).getJSONObject("function") }
+            .single { it.getString("name") == Gleo.ACTION_REPEAT }
+        val params = repeat.getJSONObject("parameters")
+        val arrived = params.getJSONObject("properties").getJSONObject(Gleo.PARAM_ARRIVED)
+        assertEquals("boolean", arrived.getString("type"))
+        assertTrue(arrived.getString("description").all { it.code < 128 })
+        assertFalse("선택 파라미터는 required 에 넣지 않는다", params.getJSONArray("required").toString().contains(Gleo.PARAM_ARRIVED))
+        assertTrue(repeat.getString("description").all { it.code < 128 })
+    }
+
+    @Test
     fun `매니페스트가 스키마의 세 함수를 받는다`() {
         val manifest = java.io.File("src/main/AndroidManifest.xml").readText()
         for (action in listOf(Gleo.ACTION_REPEAT, Gleo.ACTION_PAUSE, Gleo.ACTION_START)) {
