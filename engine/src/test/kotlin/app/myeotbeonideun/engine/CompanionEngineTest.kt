@@ -693,18 +693,19 @@ class CompanionEngineTest {
     }
 
     @Test
-    fun `가짜 도착 뒤 다시 달리면 15초 뒤 도착을 거두고 주행 중으로 돌아간다`() {
+    fun `가짜 도착 뒤 다시 달리면 속도를 알 때 15km 넘게 30초 달린 뒤 도착을 거두고 주행 중으로 돌아간다`() {
         val rig = Rig(TripConfig(place = "큰딸 집", interval = IntervalMode.FIVE_MIN))
+        rig.signals = rig.signals.copy(speedKph = 40f)
         rig.startAndDepart()
         rig.nav { copy(remainSec = 50, remainMeters = 140) }
         rig.nav { copy(remainSec = 45, remainMeters = 130) }
-        rig.set { copy(gear = Gear.PARK) } // 목적지 앞 약국에 잠깐 섰다
+        rig.set { copy(gear = Gear.PARK, speedKph = 0f) } // 목적지 앞 약국에 잠깐 섰다
         assertEquals(Phase.ARRIVED, rig.snapshot().phase)
         rig.advance(30)
         rig.clear()
-        rig.set { copy(gear = Gear.DRIVE) }
-        rig.advance(14)
-        assertEquals("15초가 안 되면 아직 도착으로 둔다", Phase.ARRIVED, rig.snapshot().phase)
+        rig.set { copy(gear = Gear.DRIVE, speedKph = 30f) }
+        rig.advance(29)
+        assertEquals("30초가 안 되면 아직 도착으로 둔다", Phase.ARRIVED, rig.snapshot().phase)
         rig.advance(1)
         assertEquals(Phase.DRIVING, rig.snapshot().phase)
         assertTrue(rig.log.any { it.second == ArrivalCancelled })
@@ -716,10 +717,62 @@ class CompanionEngineTest {
         assertNotEquals("다시 말씀드리기도 '다 왔어요'가 아니다", "arrive", rig.spoken().last().situation)
         // 진짜 목적지에 서면 다시 도착을 알린다
         rig.nav { copy(remainSec = 20, remainMeters = 30) }
-        rig.set { copy(gear = Gear.PARK) }
+        rig.set { copy(gear = Gear.PARK, speedKph = 0f) }
         assertEquals(Phase.ARRIVED, rig.snapshot().phase)
         assertEquals(1, rig.spoken("arrive").size)
         assertEquals(listOf(ArrivalSource.NEAR_DESTINATION), rig.arrivals())
+    }
+
+    @Test
+    fun `속도를 모르면 도착 뒤 D단이 2분 이어져야 거두고 후진이나 P단이 끼면 처음부터 잰다`() {
+        // 내려 드린 뒤 주차 자리로 옮기는 것은 떠난 것이 아니다(검토 NEW-7)
+        val rig = Rig()
+        rig.startAndDepart()
+        rig.nav { copy(remainSec = 50, remainMeters = 140) }
+        rig.nav { copy(remainSec = 45, remainMeters = 130) }
+        rig.set { copy(gear = Gear.PARK) }
+        assertEquals(Phase.ARRIVED, rig.snapshot().phase)
+        rig.set { copy(gear = Gear.DRIVE) }
+        rig.advance(100)
+        rig.set { copy(gear = Gear.REVERSE) } // 후진으로 자리에 넣다가
+        rig.advance(10)
+        rig.set { copy(gear = Gear.DRIVE) } // 다시 앞으로
+        rig.advance(100)
+        assertEquals("주차 자리로 옮기는 것으로는 거두지 않는다", Phase.ARRIVED, rig.snapshot().phase)
+        rig.set { copy(gear = Gear.PARK) }
+        rig.advance(30)
+        assertEquals("다시 '다 왔어요'를 하지 않는다", 1, rig.spoken("arrive").size)
+        assertFalse(rig.log.any { it.second == ArrivalCancelled })
+        // 정말 다시 떠나면 D단 2분 뒤 거둔다
+        rig.set { copy(gear = Gear.DRIVE) }
+        rig.advance(119)
+        assertEquals(Phase.ARRIVED, rig.snapshot().phase)
+        rig.advance(1)
+        assertEquals(Phase.DRIVING, rig.snapshot().phase)
+    }
+
+    @Test
+    fun `속도를 알면 천천히 자리를 옮기는 것으로는 거두지 않고 15km 넘게 달린 시간이 모두 30초면 거둔다`() {
+        val rig = Rig()
+        rig.signals = rig.signals.copy(speedKph = 40f)
+        rig.startAndDepart()
+        rig.nav { copy(remainSec = 50, remainMeters = 140) }
+        rig.nav { copy(remainSec = 45, remainMeters = 130) }
+        rig.set { copy(gear = Gear.PARK, speedKph = 0f) }
+        assertEquals(Phase.ARRIVED, rig.snapshot().phase)
+        rig.set { copy(gear = Gear.DRIVE, speedKph = 8f) } // 주차장 안을 천천히(D단 3분)
+        rig.advance(180)
+        assertEquals("속도를 알면 D단 시간만으로 거두지 않는다", Phase.ARRIVED, rig.snapshot().phase)
+        rig.set { copy(speedKph = 40f) }
+        rig.advance(20)
+        rig.set { copy(speedKph = 0f, brakePressed = true) } // 신호 대기
+        rig.advance(60)
+        assertEquals(Phase.ARRIVED, rig.snapshot().phase)
+        rig.set { copy(speedKph = 35f, brakePressed = false) }
+        rig.advance(9)
+        assertEquals("빠르게 달린 시간이 모두 29초", Phase.ARRIVED, rig.snapshot().phase)
+        rig.advance(1)
+        assertEquals(Phase.DRIVING, rig.snapshot().phase)
     }
 
     @Test
@@ -731,8 +784,10 @@ class CompanionEngineTest {
         assertEquals(Phase.ARRIVED, rig.snapshot().phase)
         rig.set { copy(gear = Gear.PARK) }
         rig.advance(5)
-        rig.set { copy(gear = Gear.DRIVE) } // 주차했다가 다시 나간다
-        rig.advance(16)
+        rig.set { copy(gear = Gear.DRIVE) } // 주차했다가 다시 나간다(속도를 모르는 차: D단 2분)
+        rig.advance(119)
+        assertEquals(Phase.ARRIVED, rig.snapshot().phase)
+        rig.advance(1)
         assertEquals(Phase.DRIVING, rig.snapshot().phase)
         assertTrue(rig.log.any { it.second == ArrivalCancelled })
     }

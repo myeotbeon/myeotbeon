@@ -261,7 +261,7 @@ class ArrivalPointTest {
         gear(Gear.PARK)
         idle(3)
         gear(Gear.DRIVE)
-        idle(20)
+        idle(121) // 속도를 모르는 차: D단이 2분 이어지면 다시 떠난 것이다
         assertEquals(Phase.DRIVING, snapshot().phase)
         assertNull(route().arrivalLat)
         assertNull(route().arrivalLon)

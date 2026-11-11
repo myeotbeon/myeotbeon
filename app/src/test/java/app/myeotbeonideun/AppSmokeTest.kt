@@ -139,7 +139,7 @@ class AppFlowTest {
         idle(2)
         assertEquals(Phase.ARRIVED, snapshot().phase)
         c.demoSource.update { it.copy(gear = Gear.DRIVE) }
-        idle(20)
+        idle(121) // 체험 모드에는 속도가 없어 D단 2분으로 다시 떠난 것을 안다
         assertEquals(Phase.DRIVING, snapshot().phase)
         idle(11 * 60)
         assertTrue("다시 달리는 동안에는 스스로 끝내지 않는다", c.trip.inProgress)

@@ -4,6 +4,7 @@ import app.myeotbeonideun.engine.intent.PassengerIntent
 import app.myeotbeonideun.engine.journey.IntervalPolicy
 import app.myeotbeonideun.engine.journey.Stage
 import app.myeotbeonideun.engine.journey.StageCalculator
+import app.myeotbeonideun.engine.model.Gear
 import app.myeotbeonideun.engine.model.Motion
 import app.myeotbeonideun.engine.model.Purpose
 import app.myeotbeonideun.engine.model.Signals
@@ -81,7 +82,12 @@ class CompanionEngine(
     private var routeChangedSinceArrival = false
     /** 도착한 뒤 P단을 본 적이 있는지(내비 도착 이벤트는 아직 굴러가는 중에 오기도 한다). */
     private var arrivedSeenParked = false
+    /** 도착 뒤 P단을 거쳐 앞으로 가는 주행 단(D)이 이어진 때부터. 후진·중립·P단이 끼면 처음부터. */
     private var driveSinceArrived: Long? = null
+    /** 그동안 15km/h 넘게 달린 시간의 합(속도를 알 때만 쓴다). */
+    private var fastMsSinceArrived = 0L
+    /** 앞 판단 때 15km/h 넘게 달리고 있었으면 그 시각(다음 판단까지의 시간을 더한다). */
+    private var fastSampleAt: Long? = null
 
     // 멈춤 판단에 쓰는 시간 기록
     private var parkedSince: Long? = null
@@ -579,23 +585,37 @@ class CompanionEngine(
 
     /**
      * 도착 판정을 되돌릴지 본다. 목적지 앞 약국·주유소에서 P단으로 섰거나 큰 병원 정문에서 내비 도착 이벤트가
-     * 일찍 와 도착으로 본 뒤에 다시 달리면, 도착이 아니었다.
-     * - 도착 뒤 P단을 거쳐 주행 단으로 [EngineParams.rearmDriveMs] 넘게 이어지면 거둔다.
+     * 일찍 와 도착으로 본 뒤에 다시 떠나면, 도착이 아니었다. 내려 드린 뒤 주차 자리로 옮기는 것은 떠난 것이 아니다(검토 NEW-7).
+     * - 도착 뒤 P단을 거쳐 다시 떠날 때: 속도를 알면 15km/h 넘게 달린 시간이 모두 [EngineParams.rearmFastMs],
+     *   모르면 앞으로 가는 주행 단(D)이 [EngineParams.rearmDriveMs] 이어지면 거둔다. 후진·중립·P단이 끼면 처음부터 다시 잰다.
      *   (도착 이벤트가 굴러가는 중에 왔으면 P단을 볼 때까지는 재지 않는다 — 주차하러 가는 길이다.)
      * - 남은 시간·거리로 도착을 봤는데 같은 경로의 남은 시간이 1분 넘게 다시 늘면(2분 넘게 남음) 거둔다.
      *   운전자가 알린 도착이나 새 경로(돌아갈 길을 넣음)는 남은 시간으로 거두지 않는다.
      */
     private fun evaluateArrivalHold(now: Long, out: MutableList<EngineAction>) {
         if (phase != Phase.ARRIVED) return
-        when (signals.motion) {
-            Motion.PARKED -> {
+        val s = signals
+        // 앞으로 가는 주행 단. 변속단을 모르고 주행 규제만 알면 그것으로 본다. 후진·중립은 주차 자리로 옮기는 중으로 본다.
+        val forward = s.gear == Gear.DRIVE || (s.gear == Gear.UNKNOWN && s.motion == Motion.IN_DRIVE)
+        // 앞 판단에서 지금까지는 그때의 상태였다(신호가 바뀌면 그때마다 판단한다).
+        fastSampleAt?.let { fastMsSinceArrived += now - it }
+        when {
+            s.motion == Motion.PARKED -> {
                 arrivedSeenParked = true
                 driveSinceArrived = null
+                fastMsSinceArrived = 0
             }
-            Motion.IN_DRIVE -> if (arrivedSeenParked && driveSinceArrived == null) driveSinceArrived = now
-            Motion.UNKNOWN -> driveSinceArrived = null
+            forward && arrivedSeenParked -> if (driveSinceArrived == null) driveSinceArrived = now
+            else -> {
+                driveSinceArrived = null
+                fastMsSinceArrived = 0
+            }
         }
-        val droveOn = driveSinceArrived?.let { now - it >= params.rearmDriveMs } ?: false
+        val speed = s.speedKph
+        val speedKnown = speedSeenMoving && speed != null
+        fastSampleAt = if (driveSinceArrived != null && speed != null && speedKnown && speed >= REARM_SPEED_KPH) now else null
+        val droveOn = if (speedKnown) fastMsSinceArrived >= params.rearmFastMs
+        else driveSinceArrived?.let { now - it >= params.rearmDriveMs } ?: false
         val remain = acceptedRemainSec
         val atArrival = remainAtArrival
         val remainGrew = arrivalSource == ArrivalSource.NEAR_DESTINATION && atArrival != null &&
@@ -613,6 +633,8 @@ class CompanionEngine(
         remainAtArrival = null
         arrivedSeenParked = false
         driveSinceArrived = null
+        fastMsSinceArrived = 0
+        fastSampleAt = null
         stopReason = StopReason.NONE
         pending.removeAll { it.situation == "arrive" }
         resetStageCandidate()
@@ -741,6 +763,8 @@ class CompanionEngine(
         routeChangedSinceArrival = false
         arrivedSeenParked = signals.motion == Motion.PARKED
         driveSinceArrived = null
+        fastMsSinceArrived = 0
+        fastSampleAt = null
         stageToAnnounce = null
         resetStageCandidate()
         pending.clear()
@@ -1068,6 +1092,8 @@ class CompanionEngine(
         const val ARRIVE_REMAIN_METERS = 150
         /** 남은 시간이 60초 안이어도 남은 거리를 알고 이보다 멀면 목적지 근처로 보지 않는다(시간과 거리를 서로 확인). */
         const val NEAR_CROSSCHECK_METERS = 300
+        /** 도착 뒤 다시 떠났다고 보는 속도. 주차장 안에서 자리를 옮기는 것보다 빠르다. */
+        const val REARM_SPEED_KPH = 15f
         /** 남은 시간으로 도착을 본 뒤 남은 시간이 이만큼 넘게 다시 늘면 도착을 거둔다. */
         const val REARM_REMAIN_INCREASE_SEC = 60
         /** P단 정차를 경유지로 보려면 남은 거리를 알 때 이보다 멀어야 한다. */

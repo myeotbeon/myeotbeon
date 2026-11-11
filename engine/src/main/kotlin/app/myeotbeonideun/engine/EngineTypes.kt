@@ -57,8 +57,9 @@ data object Silence : EngineAction
 data class Arrived(val source: ArrivalSource) : EngineAction
 
 /**
- * 도착 판정을 거뒀다: 도착 뒤 P단을 거쳐 주행 단으로 15초 넘게 달렸거나, 남은 시간으로 도착을 본 같은 경로의
- * 남은 시간이 다시 늘었다. phase 는 DRIVING 으로 돌아간다. 도착 뒤의 자동 종료 예약을 푼다.
+ * 도착 판정을 거뒀다: 도착 뒤 P단을 거쳐 다시 떠났거나(속도를 알면 15km/h 넘게 모두 30초, 모르면 D단 2분 — 후진·중립·P단이
+ * 끼면 처음부터), 남은 시간으로 도착을 본 같은 경로의 남은 시간이 다시 늘었다. phase 는 DRIVING 으로 돌아간다.
+ * 도착 뒤의 자동 종료 예약을 푼다.
  */
 data object ArrivalCancelled : EngineAction
 
@@ -105,8 +106,13 @@ data class EngineParams(
     val stageConfirmMs: Long = 10_000,
     /** … 내비 표본이 이만큼 연달아 같은 구간을 가리킬 때만 앞으로 간다(표본 하나로 굳히지 않는다). */
     val stageConfirmSamples: Int = 2,
-    /** 도착 뒤 P단을 거쳐 주행 단으로 이만큼 이어지면 도착이 아니었던 것으로 보고 거둔다. */
-    val rearmDriveMs: Long = 15_000,
+    /**
+     * 속도를 모를 때: 도착 뒤 P단을 거쳐 앞으로 가는 주행 단(D)이 이만큼 이어지면 도착이 아니었던 것으로 보고 거둔다.
+     * 후진·중립·P단이 끼면 처음부터 다시 잰다(내려 드린 뒤 주차 자리로 옮기는 것은 떠난 것이 아니다).
+     */
+    val rearmDriveMs: Long = 120_000,
+    /** 속도를 알 때: 도착 뒤 P단을 거쳐 15km/h 넘게 달린 시간이 모두 이만큼이면 거둔다. */
+    val rearmFastMs: Long = 30_000,
 )
 
 /** 화면이 그리는 데 필요한 엔진 상태. */
