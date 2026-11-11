@@ -178,14 +178,14 @@
     <string name="notice_intro">가는 길을 몇 번이든 대신 말해 드려요</string>
     <string name="notice_accept">확인했어요</string>
     <string name="notice_speed_title">속도 신호 허용(권장)</string>
-    <string name="notice_speed_body">허용하면 차의 속도로 멈춤을 알아요(브레이크를 떼고 서 있어도). 허용하지 않으면 주행 단에서 브레이크를 20초 넘게 밟고 있을 때를 멈춤으로 봐요. 허용 창에는 ‘위치 정보’에 액세스한다고 나와요. 속도 권한이 위치 권한 묶음으로 표시되기 때문이에요. 이 허용으로 앱이 읽는 것은 차의 속도예요.</string>
+    <string name="notice_speed_body">허용하면 차의 속도로 멈춤을 알아요(브레이크를 떼고 서 있어도). 허용하지 않으면 주행 단에서 브레이크를 35초 넘게 밟고 있을 때를 멈춤으로 봐요. 허용 창에는 ‘위치 정보’에 액세스한다고 나와요. 속도 권한이 위치 권한 묶음으로 표시되기 때문이에요. 이 허용으로 앱이 읽는 것은 차의 속도예요.</string>
     <string name="notice_speed_declined">속도 신호를 허용하지 않았어요. 환경설정 › 차량 신호에서 언제든 허용할 수 있어요.</string>
 
     <!-- 개발자 패널 -->
     <string name="dev_title">개발자 패널</string>
     <string name="dev_note_demo">체험 모드: 아래 값을 바꾸면 엔진이 그대로 반응해요. 실제 차량 신호가 아니에요.</string>
     <string name="dev_note_vehicle">차량 모드: 지금 읽히는 값이에요(읽기 전용). 값은 에뮬레이터 가상 콘솔에서 바꿔요.</string>
-    <string name="dev_scenario">시연 순서 재생(약 2분 30초)</string>
+    <string name="dev_scenario">시연 순서 재생(약 2분 40초)</string>
     <string name="dev_play">시연 재생</string>
     <string name="dev_play_need_trip">먼저 동행을 시작하세요</string>
     <string name="dev_stop">재생 멈춤</string>

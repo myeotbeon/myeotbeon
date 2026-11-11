@@ -89,7 +89,7 @@ class AppFlowTest {
         assertTrue(snapshot().stage.ordinal >= Stage.ON_WAY.ordinal)
 
         c.demoSource.update { it.copy(brakePressed = true) }
-        idle(22)
+        idle(36) // 체험 모드에는 속도 신호가 없어 브레이크로만 보면 35초
         assertTrue(snapshot().stopReason == StopReason.SIGNAL_WAIT)
         c.demoSource.update { it.copy(brakePressed = false) }
 

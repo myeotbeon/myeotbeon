@@ -555,12 +555,14 @@ class CompanionEngineTest {
     // ───────── 멈춤의 순간 ─────────
 
     @Test
-    fun `브레이크를 밟고 20초 서 있으면 신호 대기를 알린다`() {
+    fun `속도 신호가 없으면 브레이크를 35초 밟고 서 있어야 신호 대기를 알린다`() {
         val rig = Rig()
         rig.startAndDepart()
         rig.clear()
         rig.set { copy(brakePressed = true) }
-        rig.advance(19)
+        rig.advance(20)
+        assertTrue("서행 중에 브레이크를 오래 밟는 것일 수 있어 20초로는 말하지 않는다", rig.spoken().isEmpty())
+        rig.advance(14)
         assertTrue(rig.spoken().isEmpty())
         rig.advance(1)
         val line = rig.spoken().single()
@@ -568,6 +570,17 @@ class CompanionEngineTest {
         assertEquals(Priority.STOP, line.priority)
         assertEquals(StopReason.SIGNAL_WAIT, rig.snapshot().stopReason)
         assertEquals(1, rig.snapshot().counts.stopNotices)
+
+        // 속도 신호가 살아 있으면 속도로 보고 20초다
+        val speed = Rig()
+        speed.signals = speed.signals.copy(speedKph = 40f)
+        speed.startAndDepart()
+        speed.clear()
+        speed.set { copy(speedKph = 0f, brakePressed = true) }
+        speed.advance(19)
+        assertTrue(speed.spoken().isEmpty())
+        speed.advance(1)
+        assertEquals("stop_signal", speed.spoken().single().situation)
     }
 
     @Test
@@ -575,7 +588,7 @@ class CompanionEngineTest {
         val rig = Rig()
         rig.startAndDepart()
         rig.set { copy(brakePressed = true) }
-        rig.advance(20)
+        rig.advance(35)
         assertEquals(1, rig.spoken("stop_signal").size)
 
         rig.set { copy(brakePressed = false) }
@@ -595,7 +608,7 @@ class CompanionEngineTest {
         rig.clear()
         rig.nav { copy(congested = true) }
         rig.set { copy(brakePressed = true) }
-        rig.advance(21)
+        rig.advance(36)
         assertEquals("stop_traffic", rig.spoken().single().situation)
     }
 
@@ -1343,7 +1356,9 @@ class CompanionEngineTest {
         rig.set { this }
         rig.advance(10)
         assertTrue(rig.spoken("stop_signal").isEmpty())
-        rig.advance(10)
+        rig.advance(24) // 돌아온 때부터 다시 잰 35초가 되기 전
+        assertTrue(rig.spoken("stop_signal").isEmpty())
+        rig.advance(1)
         assertEquals(1, rig.spoken("stop_signal").size)
     }
 
@@ -1390,7 +1405,7 @@ class CompanionEngineTest {
         b.startAndDepart()
         b.clear()
         b.set { copy(brakePressed = true) }
-        b.advance(20)
+        b.advance(35)
         assertEquals("stop_signal", b.spoken().single().situation)
         b.repeat()
         assertEquals("멈춤 안내 중에는 대답이 기다린다", 1, b.spoken().size)
@@ -1574,7 +1589,7 @@ class CompanionEngineTest {
         val rig = Rig()
         rig.startAndDepart()
         rig.set { copy(brakePressed = true) }
-        rig.advance(30)
+        rig.advance(45) // 35초에 신호 대기 안내, 그 말이 끝난 뒤
         rig.clear()
         rig.ask(PassengerIntent.WHY_STOPPED)
         assertEquals("stop_signal", rig.spoken().single().situation)
@@ -1590,10 +1605,10 @@ class CompanionEngineTest {
         val rig = Rig()
         rig.startAndDepart()
         rig.repeat(); rig.advance(12)
-        rig.set { copy(brakePressed = true) }; rig.advance(21)
+        rig.set { copy(brakePressed = true) }; rig.advance(36)
         rig.set { copy(brakePressed = false, seatWindowOpenPercent = 50) }; rig.advance(7)
         val record = rig.engine.finish(rig.now)
-        assertEquals(60, record.durationSec)
+        assertEquals(75, record.durationSec)
         assertEquals(1, record.counts.proactive) // 출발 안내
         assertEquals(1, record.counts.driverRequested)
         assertEquals(1, record.counts.stopNotices)
@@ -1610,7 +1625,7 @@ class CompanionEngineTest {
         val rig = Rig(speakResult = false)
         rig.startAndDepart()
         rig.repeat(); rig.advance(12)
-        rig.set { copy(brakePressed = true) }; rig.advance(21)
+        rig.set { copy(brakePressed = true) }; rig.advance(36)
         val said = rig.spoken()
         assertEquals(listOf("intro", "depart", "ask_where", "stop_signal"), said.map { it.situation })
         val counts = rig.engine.finish(rig.now).counts
@@ -1698,7 +1713,7 @@ class CompanionEngineTest {
         val rig = Rig(TripConfig(honorific = "아버지", place = "주간보호센터", driver = "사위", purpose = Purpose.REST, interval = IntervalMode.AUTO))
         rig.startAndDepart()
         repeat(6) { rig.repeat(); rig.advance(15) }
-        rig.set { copy(brakePressed = true) }; rig.advance(25)
+        rig.set { copy(brakePressed = true) }; rig.advance(40)
         rig.set { copy(brakePressed = false) }; rig.advance(600)
         rig.nav { copy(remainSec = 100) }; rig.advance(30)
         rig.set { copy(gear = Gear.PARK) }; rig.advance(10)
@@ -1749,7 +1764,7 @@ class CompanionEngineTest {
         wait(10) // 내비 표본 하나로는 구간을 바로 바꾸지 않는다
         assertEquals("절반쯤 왔어요", cardLine())
         set { copy(brakePressed = true) }
-        wait(21)
+        wait(36) // 속도 신호가 없어 브레이크로만 보면 35초
         assertEquals("잠깐 멈췄어요", cardLine())
         set { copy(brakePressed = false) }
         assertEquals("절반쯤 왔어요", cardLine())

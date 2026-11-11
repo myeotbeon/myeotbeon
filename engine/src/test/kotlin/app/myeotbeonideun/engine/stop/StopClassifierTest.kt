@@ -41,6 +41,16 @@ class StopClassifierTest {
     }
 
     @Test
+    fun `브레이크로만 서 있음을 봤으면 35초를 기다린다`() {
+        // 속도 신호가 없으면 서행 중·내리막에서 브레이크를 오래 밟는 것도 '서 있음'이라 더 오래 기다린다(검토 결함 7)
+        val brakeOnly = { ms: Long -> classify(StopInput(Motion.IN_DRIVE, stationaryForMs = ms, stationaryBySpeed = false)) }
+        assertEquals(StopReason.NONE, brakeOnly(20_000))
+        assertEquals(StopReason.NONE, brakeOnly(34_999))
+        assertEquals(StopReason.SIGNAL_WAIT, brakeOnly(35_000))
+        assertEquals(StopReason.TRAFFIC, classify(StopInput(Motion.IN_DRIVE, stationaryForMs = 35_000, stationaryBySpeed = false, congested = true)))
+    }
+
+    @Test
     fun `서 있고 내비가 정체를 알리면 정체다`() {
         assertEquals(
             StopReason.TRAFFIC,

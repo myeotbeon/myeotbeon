@@ -176,7 +176,7 @@ class ScreenshotTest {
 
     @Test
     fun `04 동행 중 - 신호 대기`() = shot("04_companion_signal_wait", drivingShell) {
-        Companion(halfway().set { copy(brakePressed = true) }.wait(21).ui("절반쯤"))
+        Companion(halfway().set { copy(brakePressed = true) }.wait(36).ui("절반쯤"))
     }
 
     @Test
@@ -274,7 +274,7 @@ class ScreenshotTest {
     @Test
     fun `15 체험 모드 - 개발자 패널과 동행 화면`() =
         shot("15_dev_panel", ShellUi(Screen.DEV, restricted = true, tripActive = true, demo = true)) { wide ->
-            val drive = halfway().set { copy(brakePressed = true) }.wait(21)
+            val drive = halfway().set { copy(brakePressed = true) }.wait(36)
             Row {
                 if (wide) Companion2(drive.ui("절반쯤"), Modifier.weight(1.25f).fillMaxHeight())
                 DevPanelScreen(
@@ -285,7 +285,7 @@ class ScreenshotTest {
                         ),
                         editable = true,
                         tripActive = true,
-                        scenarioStep = "브레이크를 밟고 20초 — 신호 대기를 알립니다",
+                        scenarioStep = "브레이크를 밟고 35초 — 신호 대기를 알립니다",
                     ),
                     NoActions,
                     Modifier.weight(1f).fillMaxHeight(),

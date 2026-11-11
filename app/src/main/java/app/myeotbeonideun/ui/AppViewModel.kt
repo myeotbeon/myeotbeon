@@ -163,7 +163,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app), DevPanelActions {
 
     /**
      * 속도 권한(CAR_SPEED)이 없으면 첫 실행 안내에서 한 번 허용을 권한다. 허용하지 않으면 '정지'는
-     * 주행 단에서 브레이크를 20초 넘게 밟고 있는 것으로만 본다(오토홀드로 발을 떼고 서 있으면 모른다).
+     * 주행 단에서 브레이크를 35초 넘게 밟고 있는 것으로만 본다(오토홀드로 발을 떼고 서 있으면 모른다).
      */
     private fun speedAsk(granted: Boolean, asked: Boolean): SpeedAsk = when {
         !c.isAutomotive || granted -> SpeedAsk.HIDDEN

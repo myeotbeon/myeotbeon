@@ -108,7 +108,7 @@ class DemoSignalSource(private val scope: CoroutineScope) : SignalSource {
     }
 
     /**
-     * 명세 6절의 시연 순서를 재생한다(약 2분 30초). 동행을 시작한 뒤에 부른다.
+     * 명세 6절의 시연 순서를 재생한다(약 2분 40초). 동행을 시작한 뒤에 부른다.
      * @param seat 동승자가 앉은 자리
      */
     fun playScenario(seat: SeatPosition) {
@@ -121,7 +121,8 @@ class DemoSignalSource(private val scope: CoroutineScope) : SignalSource {
             }
             step("기어 D — 출발을 알립니다", 14) { it.copy(gear = Gear.DRIVE) }
             step("지금 ‘다시 말씀드리기’를 두 번 눌러 보세요", 18)
-            step("브레이크를 밟고 20초 — 신호 대기를 알립니다", 27) { it.copy(brakePressed = true) }
+            // 체험 모드에는 속도 신호가 없어 엔진은 브레이크로만 서 있음을 보고 35초를 기다린다.
+            step("브레이크를 밟고 35초 — 신호 대기를 알립니다", 42) { it.copy(brakePressed = true) }
             step("다시 출발", 3) { it.copy(brakePressed = false) }
             step("남은 시간이 절반으로 — 구간이 바뀝니다", 10) { it.copy(nav = it.nav.copy(remainSec = 400)) }
             step("동승 좌석 창문 40% — 손은 안에 두시라고 알립니다", 9) { it.copy(windowOpenPercent = it.windowOpenPercent + (seat to 40)) }

@@ -6,8 +6,8 @@ import app.myeotbeonideun.engine.model.Motion
 enum class StopReason(val situation: String?) {
     NONE(null),
     /**
-     * 주행 단인데 20초 넘게 서 있다. '서 있음'은 속도 신호가 살아 있으면 속도로, 아니면 브레이크를 밟고 있는 것으로 본다
-     * (CompanionEngine — 속도 권한이 없으면 서행 중 브레이크도 '서 있음'이고, 오토홀드로 발을 떼고 서 있으면 모른다).
+     * 주행 단에서 서 있다. '서 있음'은 속도 신호가 살아 있으면 속도로(20초), 아니면 브레이크를 밟고 있는 것으로(35초) 본다
+     * (CompanionEngine — 속도 권한이 없으면 서행 중 브레이크도 '서 있음'이라 더 오래 기다린다. 오토홀드로 발을 떼고 서 있으면 모른다).
      */
     SIGNAL_WAIT("stop_signal"),
     /** 서 있고, 내비가 경로에 정체가 있다고 알려 줬다. */
@@ -33,12 +33,14 @@ enum class StopReason(val situation: String?) {
  * 분류에 쓰는 값. null = 차가 그 신호를 주지 않음.
  *
  * @property stationaryForMs 주행 단에서 서 있은 시간. 서 있지 않으면 null
+ * @property stationaryBySpeed 서 있음을 속도로 봤는지(false 면 브레이크를 밟고 있는 것으로만 봤다 — 더 오래 기다린다)
  * @property parkedForMs P단에 둔 시간. P단이 아니면 null
  * @property driverDoorOpenedSincePark P단에 둔 뒤 운전석 문이 한 번이라도 열렸는지. 문 신호가 없으면 null
  */
 data class StopInput(
     val motion: Motion,
     val stationaryForMs: Long? = null,
+    val stationaryBySpeed: Boolean = true,
     val parkedForMs: Long? = null,
     val congested: Boolean = false,
     val driverSeatOccupied: Boolean? = null,
@@ -53,8 +55,13 @@ data class StopInput(
 )
 
 object StopClassifier {
-    /** 주행 단에서 이만큼 서 있으면 신호 대기·정체로 본다. */
+    /** 주행 단에서 이만큼 서 있으면(속도로 봄) 신호 대기·정체로 본다. */
     const val STATIONARY_MS = 20_000L
+    /**
+     * 속도 신호가 없어 브레이크로만 서 있음을 볼 때 기다리는 시간. 서행 중이나 내리막에서 브레이크를 오래 밟는 것을 '서 있음'으로
+     * 잘못 보는 일을 줄이려고 속도로 볼 때보다 길게 잡는다(검토 결함 7).
+     */
+    const val STATIONARY_BRAKE_ONLY_MS = 35_000L
     /** P단에 두고 이만큼 지나면 경유지 정차로 본다(운전자 이탈 판단이 먼저 나오게 하는 여유). */
     const val WAYPOINT_DWELL_MS = 5_000L
 
@@ -84,7 +91,8 @@ object StopClassifier {
         if (parked && input.departed && (input.parkedForMs ?: 0L) >= WAYPOINT_DWELL_MS) {
             return if (input.farFromDestination) StopReason.WAYPOINT_STOP else StopReason.PARKED_UNSURE
         }
-        if (input.motion == Motion.IN_DRIVE && (input.stationaryForMs ?: 0L) >= STATIONARY_MS) {
+        val stationaryNeed = if (input.stationaryBySpeed) STATIONARY_MS else STATIONARY_BRAKE_ONLY_MS
+        if (input.motion == Motion.IN_DRIVE && (input.stationaryForMs ?: 0L) >= stationaryNeed) {
             return if (input.congested) StopReason.TRAFFIC else StopReason.SIGNAL_WAIT
         }
         return StopReason.NONE

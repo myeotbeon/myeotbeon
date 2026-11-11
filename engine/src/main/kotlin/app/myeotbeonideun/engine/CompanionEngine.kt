@@ -655,6 +655,7 @@ class CompanionEngine(
             StopInput(
                 motion = s.motion,
                 stationaryForMs = stationarySince?.let { now - it },
+                stationaryBySpeed = speedSeenMoving && s.speedKph != null,
                 parkedForMs = parkedSince?.let { now - it },
                 congested = s.nav.congested,
                 driverSeatOccupied = driverSeat.value,
