@@ -65,8 +65,9 @@ fun SettingsScreen(
     onRequestSpeedPermission: () -> Unit,
     onClearAll: () -> Unit,
     onOpenDevPanel: () -> Unit,
-    onSeatReading: (SeatReading) -> Unit = {},
+    // Compose 규칙: modifier 는 첫째 선택 인자다(그 뒤에 기본값이 있는 콜백을 둔다).
     modifier: Modifier = Modifier,
+    onSeatReading: (SeatReading) -> Unit = {},
 ) {
     val colors = LocalAppColors.current
     Column(
