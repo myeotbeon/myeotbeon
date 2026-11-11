@@ -135,6 +135,8 @@ class CompanionEngine(
     private var busyUntil = Long.MIN_VALUE
     private var busyPriority = Priority.PROACTIVE
     private var lastPassengerSpeechAt: Long? = null
+    /** 마지막으로 동승자에게 한 말의 상황 이름. */
+    private var lastPassengerSituation: String? = null
     private val pending = ArrayList<Candidate>()
     private var stageToAnnounce: Stage? = null
     private var answerCount = 0
@@ -239,7 +241,13 @@ class CompanionEngine(
         val stopSituation = activeStopSituation()
         val situation = when (intent) {
             PassengerIntent.WHERE -> "ask_where"
-            PassengerIntent.WHEN -> if (phase == Phase.ARRIVED) "arrive" else whenSituation
+            // 서 있으면 그 사실로 대답한다. 내비 없는 길의 목적지에서 P단으로 섰는데 "아직 가는 길이에요"라고 하면
+            // 도착을 부정하게 된다(검토 NEW-6 — ARRIVED_Q·WHY_STOPPED 와 같게).
+            PassengerIntent.WHEN -> when {
+                phase == Phase.ARRIVED -> "arrive"
+                stopSituation != null -> stopSituation
+                else -> whenSituation
+            }
             PassengerIntent.ARRIVED_Q -> when {
                 phase == Phase.ARRIVED -> "arrive"
                 stopSituation != null -> stopSituation
@@ -704,7 +712,10 @@ class CompanionEngine(
             StopReason.WAYPOINT_STOP, StopReason.PARKED_UNSURE ->
                 if (!waypointAnnounced) {
                     waypointAnnounced = true
-                    offer(stopCandidate(reason.situation!!, now, reason), now, out)
+                    // P단에 막 둔 때 물음이나 '다시 말씀드리기'에 같은 말로 방금 대답했으면 되풀이하지 않는다.
+                    val justSaid = lastPassengerSituation == reason.situation &&
+                        lastPassengerSpeechAt?.let { now - it < params.stopCooldownMs } == true
+                    if (!justSaid) offer(stopCandidate(reason.situation!!, now, reason), now, out)
                 }
             StopReason.SIGNAL_WAIT, StopReason.TRAFFIC -> {
                 val entered = prev != StopReason.SIGNAL_WAIT && prev != StopReason.TRAFFIC
@@ -889,11 +900,21 @@ class CompanionEngine(
         else -> activeStopSituation() ?: stageSituationForRepeat()
     }
 
-    /** 지금 서 있는 이유를 말하는 상황 이름. 서 있지 않으면 null */
+    /**
+     * 지금 서 있는 이유를 말하는 상황 이름. 서 있지 않으면 null.
+     * 출발한 뒤 P단에 막 둔 때(정차 분류까지 5초가 안 됨)도 서 있다는 사실로 말한다 — 그때 "아직 가는 길이에요"나 구간 말을 하면
+     * 도착을 부정하게 된다. 내비가 넉넉히 남았다고 하면 경유지 정차, 아니면 도착을 부정하지 않는 정차 문장이다.
+     */
     private fun activeStopSituation(): String? = when (stopReason) {
         StopReason.SIGNAL_WAIT, StopReason.TRAFFIC, StopReason.WAYPOINT_STOP, StopReason.PARKED_UNSURE -> stopReason.situation
         StopReason.DRIVER_AWAY -> "driver_away_again"
-        else -> null
+        StopReason.NONE, StopReason.DRIVER_BACK ->
+            if (phase == Phase.DRIVING && signals.motion == Motion.PARKED) {
+                if (navSaysFar()) StopReason.WAYPOINT_STOP.situation else StopReason.PARKED_UNSURE.situation
+            } else {
+                null
+            }
+        StopReason.ARRIVED -> null
     }
 
     /** 출발 직후에 다시 말할 때는 "이제 출발해요" 대신 어디 가는지를 말한다. */
@@ -998,6 +1019,7 @@ class CompanionEngine(
         busyUntil = now + estimateSpeechMs(text)
         busyPriority = c.priority
         lastPassengerSpeechAt = now
+        lastPassengerSituation = c.situation
         lastLine = text
         lastLineAt = now
     }

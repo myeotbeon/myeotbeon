@@ -1470,6 +1470,51 @@ class CompanionEngineTest {
     }
 
     @Test
+    fun `내비 없는 길에서 P단으로 서 있을 때 언제 도착하느냐고 물어도 아직 가는 길이라고 하지 않는다`() {
+        // 결함 2 에서 막은 '도착 부정'이 '언제 도착해?' 대답으로 남아 있었다(검토 NEW-6)
+        val rig = Rig()
+        rig.signals = rig.signals.copy(nav = NavState())
+        rig.startAndDepart()
+        rig.clear()
+        rig.set { copy(gear = Gear.PARK) }
+        rig.advance(2) // P단에 막 둔 때(정차 분류 5초 전)
+        rig.ask(PassengerIntent.WHEN)
+        assertEquals("stop_parked_neutral", rig.spoken().single().situation)
+        rig.advance(12)
+        assertEquals("방금 같은 말로 대답했으면 5초 뒤의 정차 문장을 되풀이하지 않는다", 1, rig.spoken().size)
+        assertEquals(StopReason.PARKED_UNSURE, rig.snapshot().stopReason)
+        rig.ask(PassengerIntent.WHEN) // 정차로 분류된 뒤
+        rig.advance(12)
+        rig.ask(PassengerIntent.ARRIVED_Q)
+        rig.advance(12)
+        assertTrue(rig.spoken().map { it.situation }.toString(), rig.spoken().all { it.situation == "stop_parked_neutral" })
+        rig.spoken().forEach { assertFalse(it.text, it.text.contains("아직")) }
+
+        // P단에 막 둔 때의 '다시 말씀드리기'와 '왜 안 가?'도 같다(내비가 넉넉히 남았으면 경유지 정차)
+        val far = Rig()
+        far.startAndDepart()
+        far.clear()
+        far.set { copy(gear = Gear.PARK) }
+        far.repeat()
+        far.advance(1)
+        assertEquals("stop_waypoint", far.spoken().single().situation)
+        val near = Rig()
+        near.signals = near.signals.copy(nav = NavState())
+        near.startAndDepart()
+        near.clear()
+        near.set { copy(gear = Gear.PARK) }
+        near.ask(PassengerIntent.WHY_STOPPED)
+        assertEquals("stop_parked_neutral", near.spoken().single().situation)
+
+        // 달리는 중에는 그대로 구간 말로 대답한다
+        val driving = Rig()
+        driving.startAndDepart()
+        driving.clear()
+        driving.ask(PassengerIntent.WHEN)
+        assertEquals("ask_when_onway", driving.spoken().single().situation)
+    }
+
+    @Test
     fun `서 있을 때 왜 안 가느냐고 물으면 서 있는 이유를 말한다`() {
         val rig = Rig()
         rig.startAndDepart()
