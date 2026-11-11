@@ -35,13 +35,16 @@ import app.myeotbeonideun.ui.theme.LocalAppColors
 
 data class RecordsUi(
     val today: DaySummary = DaySummary(0, 0, TripCounts()),
-    /** 최근 8번 이동에서 '직접 대답하지 않아도 된 횟수'. 오래된 것부터. */
+    /** 최근 8번 이동에서 '차가 대신 말한 횟수'. 오래된 것부터. */
     val trend: List<Int> = emptyList(),
 )
 
 /**
  * 오늘의 기록(정차 중에만). 기록은 횟수와 시간뿐이고 기기 안에만 있다.
- * 주장하는 것은 "운전자가 직접 대답하지 않아도 된 횟수"까지다.
+ *
+ * 큰 숫자는 '차가 대신 말한 횟수'([TripCounts.spokenOnBehalf] = 먼저 말함 + 다시 말씀드리기 + 물음에 대답 + 멈춤 안내,
+ * 끝까지 소리 낸 것만)다. 주장하는 것은 여기까지다 — 운전자가 대답하지 않아도 됐다거나 불안이 줄었다고 말하지 않는다.
+ * 문·창문·안전띠 안내는 따로 세고, 끝까지 소리 내지 못한 말은 어디에도 넣지 않고 작게 따로 보인다.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -68,13 +71,16 @@ fun RecordsScreen(ui: RecordsUi, modifier: Modifier = Modifier) {
             )
         }
 
+        // 큰 숫자의 세부(더하면 큰 숫자가 된다)
+        SectionTitle(stringResource(R.string.records_breakdown))
         FlowRow(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Stat(stringResource(R.string.records_proactive), c.proactive)
             Stat(stringResource(R.string.records_requested), c.driverRequested)
             Stat(stringResource(R.string.records_answered), c.answered)
             Stat(stringResource(R.string.records_stop), c.stopNotices)
-            Stat(stringResource(R.string.records_safety), c.safetyNotices)
         }
+        Text(stringResource(R.string.records_safety, c.safetyNotices), style = AppType.body, color = colors.textSoft)
+        Text(stringResource(R.string.records_skipped, c.skipped), style = AppType.small, color = colors.textSoft)
 
         Panel {
             SectionTitle(stringResource(R.string.records_trend))

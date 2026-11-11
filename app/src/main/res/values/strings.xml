@@ -79,17 +79,19 @@
     <!-- 오늘의 기록 -->
     <string name="records_title">오늘의 기록</string>
     <string name="records_count">%1$d번</string>
-    <string name="records_handled">직접 대답하지 않아도 됐어요</string>
+    <string name="records_handled">차가 대신 말했어요</string>
     <string name="records_today_summary">오늘 이동 %1$d번 · 함께한 시간 %2$d분</string>
-    <string name="records_proactive">차가 먼저 말함</string>
+    <string name="records_breakdown">그중</string>
+    <string name="records_proactive">먼저 말함</string>
     <string name="records_requested">다시 말씀드리기</string>
-    <string name="records_answered">물음에 대답함</string>
+    <string name="records_answered">물음에 대답</string>
     <string name="records_stop">멈춤 안내</string>
-    <string name="records_safety">문·창문·안전띠 안내</string>
-    <string name="records_trend">최근 8번 이동 — 직접 대답하지 않아도 된 횟수</string>
+    <string name="records_safety">문·창문·안전띠 안내 %1$d번은 위 횟수와 따로 셌어요.</string>
+    <string name="records_skipped">끝까지 소리 내지 못한 말 %1$d번(내비 안내·통화 중, 음성 엔진 없음, 다른 말에 끊김 등)은 위 횟수에 넣지 않았어요.</string>
+    <string name="records_trend">최근 8번 이동 — 차가 대신 말한 횟수</string>
     <string name="records_trend_description">최근 이동의 횟수: %1$s</string>
     <string name="records_empty">아직 기록이 없어요. 동행을 마치면 여기에 쌓여요.</string>
-    <string name="records_note">기록은 횟수와 시간뿐이고 이 기기에만 있어요. 누가 무슨 말을 했는지는 남기지 않아요.</string>
+    <string name="records_note">횟수는 차가 끝까지 소리 내 읽은 말만 세요. 운전하는 분이 대답을 덜 했는지, 마음이 편해졌는지를 재는 값은 아니에요. 기록은 횟수와 시간뿐이고 이 기기에만 있어요. 누가 무슨 말을 했는지는 남기지 않아요.</string>
 
     <!-- 환경설정 -->
     <string name="settings_title">환경설정</string>
