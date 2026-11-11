@@ -72,8 +72,6 @@ data class EngineParams(
     val redirectEvery: Int = 2,
     /** 기다리는 말이 이 시간을 넘기면 버린다(이미 지난 사실을 말하지 않게). */
     val pendingTtlMs: Long = 20_000,
-    /** 변속단·주행 규제 신호가 전혀 없을 때, 시작하고 이만큼 지나면 출발한 것으로 본다. */
-    val unknownMotionDepartMs: Long = 10_000,
     /** 운전자 화면의 알림 한 줄을 지우는 시간(긴급하지 않은 것). */
     val noticeHoldMs: Long = 15_000,
 )

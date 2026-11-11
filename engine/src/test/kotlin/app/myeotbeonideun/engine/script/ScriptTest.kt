@@ -225,6 +225,18 @@ class ScriptValidatorTest {
     }
 
     @Test
+    fun `직접 쓴 화제 전환 한마디도 같은 규칙으로 검사하되 호칭은 요구하지 않는다`() {
+        fun rules(line: String) = ScriptValidator.validateCustomRedirect(line).map { it.rule }
+        assertTrue(rules("가서 손주 얼굴 봐요.").isEmpty())
+        assertEquals(listOf("F-슬롯"), rules("{곳}에서 쉬어요."))
+        assertEquals(listOf("R2"), rules("가요. 손주 봐요."))
+        assertEquals(listOf("R2"), rules("가나다라마바사아자차카타파하가나다라마."))
+        assertEquals(listOf("R3"), rules("아까처럼 맛있게 드세요."))
+        assertEquals(listOf("F-빈줄"), rules("  "))
+        assertTrue(ScriptValidator.validateCustomRedirect("또 가요.").all { it.situation == ScriptValidator.CUSTOM_REDIRECT_KEY })
+    }
+
+    @Test
     fun `10절 슬롯과 조사 표기를 검사한다`() {
         assertTrue("F-슬롯" in errors("x", Audience.PASSENGER, "{호칭}, {할일} 하러 가요."))
         assertEquals(listOf("F-조사"), errors("x", Audience.PASSENGER, "{호칭}, {운전자:께서} 와요."))

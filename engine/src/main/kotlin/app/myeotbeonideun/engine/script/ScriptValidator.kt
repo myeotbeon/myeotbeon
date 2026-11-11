@@ -126,6 +126,41 @@ object ScriptValidator {
         return null
     }
 
+    /** 직접 쓴 화제 전환 한마디를 검사할 때 결과에 쓰는 상황 이름. */
+    const val CUSTOM_REDIRECT_KEY = "redirect_custom"
+
+    /**
+     * 사용자가 직접 쓴 화제 전환 한마디를 검사한다(대본 밖의 문장이라 대본 검사만으로는 막지 못한다).
+     * 대본의 화제 전환 줄과 같은 규칙이다: 한 문장(R2), 18음절 이하(R2), 금지어(R3), 몸을 내밀게 하는 말(S),
+     * 병명(D), 빈칸 없음(F). 대답 뒤에 이어 붙여 읽으므로 호칭으로 시작하지 않아도 된다(R1 은 보지 않는다).
+     *
+     * @param line 엔진이 읽는 꼴([app.myeotbeonideun.engine.CompanionEngine.customRedirectText])
+     */
+    fun validateCustomRedirect(line: String): List<Finding> {
+        val out = ArrayList<Finding>()
+        fun err(rule: String, msg: String) { out += Finding(Severity.ERROR, rule, CUSTOM_REDIRECT_KEY, 0, msg) }
+        val text = line.trim()
+        if (text.isEmpty()) {
+            err("F-빈줄", "빈 줄입니다")
+            return out
+        }
+        if (text.contains('{') || text.contains('}')) err("F-슬롯", "직접 쓴 한마디에는 빈칸({…})을 쓸 수 없습니다")
+        val sentences = splitSentences(text)
+        if (sentences.size > MAX_SENTENCES_REDIRECT) {
+            err("R2", "문장이 ${sentences.size}개입니다(최대 ${MAX_SENTENCES_REDIRECT}개)")
+        }
+        for (sentence in sentences) {
+            val n = countSyllables(sentence)
+            if (n > MAX_SYLLABLES_PER_SENTENCE) {
+                err("R2", "한 문장이 ${n}음절입니다(최대 ${MAX_SYLLABLES_PER_SENTENCE}): \"$sentence\"")
+            }
+        }
+        findForbidden(text)?.let { err("R3", "금지어 '$it'") }
+        UNSAFE.firstOrNull { text.contains(it) }?.let { err("S", "몸을 내밀게 할 수 있는 말 '$it'") }
+        DIGNITY.firstOrNull { text.contains(it) }?.let { err("D", "쓰지 않는 말 '$it'") }
+        return out
+    }
+
     fun validate(book: ScriptBook, sample: SlotValues = SlotValues.SAMPLE): List<Finding> {
         val out = ArrayList<Finding>()
         for ((key, to) in REQUIRED) {

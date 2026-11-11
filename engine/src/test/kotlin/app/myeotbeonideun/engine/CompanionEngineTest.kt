@@ -124,12 +124,18 @@ class CompanionEngineTest {
     }
 
     @Test
-    fun `변속단과 주행 규제 신호가 모두 없으면 10초 뒤 출발한 것으로 본다`() {
+    fun `변속단과 주행 규제 신호가 모두 없으면 시간만으로 출발했다고 하지 않는다`() {
         val rig = Rig()
         rig.signals = Signals()
         rig.start()
-        rig.advance(30)
+        rig.advance(60)
+        assertTrue("P단일 수도 있으므로 '이제 출발해요'를 하지 않는다", rig.spoken("depart").isEmpty())
+        assertEquals(Phase.READY, rig.snapshot().phase)
+        // 움직였다는 증거(속도)가 오면 그때 출발로 본다
+        rig.set { copy(speedKph = 30f) }
+        rig.advance(12)
         assertEquals(1, rig.spoken("depart").size)
+        assertEquals(Phase.DRIVING, rig.snapshot().phase)
     }
 
     // ───────── 다시 말씀드리기와 화제 전환 ─────────
@@ -190,6 +196,43 @@ class CompanionEngineTest {
         rig.repeat(); rig.advance(12)
         rig.repeat(); rig.advance(12)
         assertTrue(rig.spoken()[1].text.endsWith("가서 손주 얼굴 봐요."))
+    }
+
+    @Test
+    fun `직접 쓴 한마디가 대본 규칙을 통과하지 못하면 읽지 않는다`() {
+        val bad = listOf(
+            "또 손주 보러 가요", // 금지어
+            "가서 손주 얼굴 보고 맛있는 저녁도 같이 먹고 와요", // 20음절
+            "가요. 손주 봐요", // 두 문장
+        )
+        for (line in bad) {
+            assertTrue(line, CompanionEngine.checkCustomPurposeLine(line, "어머니").isNotEmpty())
+            val rig = Rig(TripConfig(place = "큰딸 집", purpose = Purpose.CUSTOM, customPurposeLine = line))
+            rig.startAndDepart()
+            rig.clear()
+            repeat(2) { rig.repeat(); rig.advance(12) }
+            assertEquals(2, rig.spoken().size)
+            rig.spoken().forEach { assertEquals(line, 2, ScriptValidator.splitSentences(it.text).size) }
+        }
+    }
+
+    @Test
+    fun `직접 쓴 한마디 검사는 앞의 호칭 부름을 떼고 마침표를 붙인 꼴로 본다`() {
+        assertEquals("가서 손주 봐요.", CompanionEngine.customRedirectText("  어머니, 가서 손주 봐요 ", "어머니"))
+        assertNull(CompanionEngine.customRedirectText("  . ", "어머니"))
+        assertTrue(CompanionEngine.checkCustomPurposeLine("어머니, 가서 손주 봐요", "어머니").isEmpty())
+        assertEquals(listOf("F-빈줄"), CompanionEngine.checkCustomPurposeLine(" ", "어머니").map { it.rule })
+        assertEquals(listOf("R3"), CompanionEngine.checkCustomPurposeLine("잊지 말고 약 드세요", "어머니").map { it.rule })
+        assertEquals(listOf("D"), CompanionEngine.checkCustomPurposeLine("치매 검사 받으러 가요", "어머니").map { it.rule })
+        assertEquals(listOf("S"), CompanionEngine.checkCustomPurposeLine("손을 내밀어 보세요", "어머니").map { it.rule })
+
+        // 통과한 한마디는 호칭 부름을 뗀 꼴로 대답 뒤에 붙는다
+        val rig = Rig(TripConfig(place = "큰딸 집", purpose = Purpose.CUSTOM, customPurposeLine = "어머니, 가서 손주 봐요"))
+        rig.startAndDepart()
+        rig.clear()
+        repeat(2) { rig.repeat(); rig.advance(12) }
+        assertTrue(rig.spoken()[1].text, rig.spoken()[1].text.endsWith(". 가서 손주 봐요."))
+        assertEquals(1, Regex("어머니").findAll(rig.spoken()[1].text).count())
     }
 
     @Test

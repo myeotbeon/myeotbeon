@@ -10,6 +10,7 @@ import app.myeotbeonideun.engine.model.Signals
 import app.myeotbeonideun.engine.model.TripConfig
 import app.myeotbeonideun.engine.record.TripCounts
 import app.myeotbeonideun.engine.record.TripRecord
+import app.myeotbeonideun.engine.script.Finding
 import app.myeotbeonideun.engine.script.ScriptBook
 import app.myeotbeonideun.engine.script.ScriptEngine
 import app.myeotbeonideun.engine.script.ScriptValidator
@@ -389,7 +390,9 @@ class CompanionEngine(
         val departed = when (signals.motion) {
             Motion.IN_DRIVE -> true
             Motion.PARKED -> false
-            Motion.UNKNOWN -> now - startedAt >= params.unknownMotionDepartMs
+            // 변속단도 주행 규제도 모르면 시간만으로 출발했다고 하지 않는다(P단인데 "이제 출발해요"가 나오지 않게).
+            // 움직였다는 증거(속도 5km/h 이상)가 있을 때만 출발로 본다.
+            Motion.UNKNOWN -> speedSeenMoving
         }
         if (!departed) return
         phase = Phase.DRIVING
@@ -643,22 +646,12 @@ class CompanionEngine(
     /** 화제 전환 한마디. 목적이 없으면 붙이지 않는다. 직접 쓴 한마디는 그대로 읽는다. */
     private fun redirectLine(): String? = when (config.purpose) {
         Purpose.NONE -> null
-        Purpose.CUSTOM -> config.customPurposeLine.trim().takeIf { it.isNotEmpty() }?.let {
-            if (it.last() in ".!?") it else "$it."
-        }
-        else -> config.purpose.situation?.let { script.next(it) }?.let(::withoutCall)
+        // 직접 쓴 한마디도 대본의 화제 전환 줄과 같은 검사(금지어·길이)를 통과해야 읽는다. 통과하지 못하면 붙이지 않는다.
+        Purpose.CUSTOM -> customRedirectText(config.customPurposeLine, config.honorific)
+            ?.takeIf { ScriptValidator.validateCustomRedirect(it).isEmpty() }
+        else -> config.purpose.situation?.let { script.next(it) }?.let { withoutCall(it, config.honorific) }
     }
 
-    /**
-     * 대본의 화제 전환 줄도 호칭으로 시작한다(명세 10절). 대답 뒤에 이어 붙일 때는 그 호칭 부름을 떼어,
-     * 한 번의 말에 호칭이 두 번 들리지 않게 한다("어머니, … 가서 같이 식사하세요.").
-     */
-    private fun withoutCall(line: String): String {
-        val call = config.honorific.trim()
-        if (call.isEmpty() || !line.startsWith(call)) return line
-        val rest = line.substring(call.length).trimStart()
-        return if (rest.startsWith(",")) rest.substring(1).trimStart() else line
-    }
 
     /**
      * 운전자 화면에 알림을 올린다. 상황마다 따로 보관하고 화면에는 가장 급한 것 하나를 보인다([topNotice]).
@@ -705,6 +698,36 @@ class CompanionEngine(
 
         /** 가는 곳 이름이 이것이면 집으로 가는 길로 본다(공백은 빼고 견준다). */
         val HOME_NAMES = setOf("집", "우리집", "댁", "자택")
+
+        /**
+         * 대본의 화제 전환 줄도 호칭으로 시작한다(명세 10절). 대답 뒤에 이어 붙일 때는 그 호칭 부름을 떼어,
+         * 한 번의 말에 호칭이 두 번 들리지 않게 한다("어머니, … 가서 같이 식사하세요.").
+         */
+        fun withoutCall(line: String, honorific: String): String {
+            val call = honorific.trim()
+            if (call.isEmpty() || !line.startsWith(call)) return line
+            val rest = line.substring(call.length).trimStart()
+            return if (rest.startsWith(",")) rest.substring(1).trimStart() else line
+        }
+
+        /**
+         * 직접 쓴 화제 전환 한마디를 엔진이 읽는 꼴로 다듬는다: 앞뒤 공백과 앞의 호칭 부름("어머니, ")을 떼고,
+         * 끝에 문장부호가 없으면 마침표를 붙인다. 비어 있으면 null
+         */
+        fun customRedirectText(line: String, honorific: String): String? {
+            val text = withoutCall(line.trim(), honorific).trim()
+            if (text.none { it.isLetterOrDigit() }) return null
+            return if (text.last() in ".!?") text else "$text."
+        }
+
+        /**
+         * 직접 쓴 화제 전환 한마디를 검사한다. 앱이 입력할 때 불러 문제를 바로 알려 줄 수 있게 둔 함수다.
+         * 대본의 화제 전환 줄과 같은 규칙(한 문장, 18음절, 금지어, 몸을 내밀게 하는 말, 병명)이고,
+         * 엔진도 이 검사를 통과한 한마디만 읽는다.
+         * @return 찾은 문제. 비어 있으면 읽어도 된다
+         */
+        fun checkCustomPurposeLine(line: String, honorific: String): List<Finding> =
+            ScriptValidator.validateCustomRedirect(customRedirectText(line, honorific) ?: "")
 
         /** 느리게 말할 때 걸리는 시간 어림: 음절당 0.24초 + 문장 사이 쉼. */
         fun estimateSpeechMs(text: String): Long {
