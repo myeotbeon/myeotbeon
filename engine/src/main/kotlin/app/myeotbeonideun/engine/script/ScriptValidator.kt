@@ -94,6 +94,9 @@ object ScriptValidator {
         "belt_off_d" to Audience.DRIVER,
         // '다시 말씀드리기'가 '잠시 조용히'를 풀었을 때 운전자 화면에 보이는 한 줄
         "quiet_off_d" to Audience.DRIVER,
+        // 운전자가 내린 사이 동승 좌석 문이 열렸거나 자리가 비었을 때, 돌아온 운전자에게
+        "away_door_d" to Audience.DRIVER,
+        "away_seat_d" to Audience.DRIVER,
         "redirect_clinic" to Audience.PASSENGER,
         "redirect_meal" to Audience.PASSENGER,
         "redirect_family" to Audience.PASSENGER,

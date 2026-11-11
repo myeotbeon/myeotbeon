@@ -786,6 +786,70 @@ class CompanionEngineTest {
     }
 
     @Test
+    fun `운전자가 내린 동안 동승 좌석 문이 열리면 바로 다시 안심시키고 돌아온 운전자에게 알린다`() {
+        val rig = Rig()
+        rig.startAndDepart()
+        rig.set { copy(gear = Gear.PARK) }
+        rig.set { copy(driverDoorOpen = true, driverSeatOccupied = false) }
+        rig.advance(3)
+        rig.set { copy(driverDoorOpen = false) }
+        rig.advance(10)
+        assertEquals(1, rig.spoken("driver_away").size)
+        rig.clear()
+
+        rig.set { copy(seatDoorOpen = true) } // 혼자 남은 어르신이 문을 연다
+        val line = rig.spoken().single()
+        assertEquals("driver_away_again", line.situation)
+        assertEquals(Priority.SAFETY, line.priority)
+        assertTrue(line.text, line.text.contains("기다려"))
+        assertTrue("운전자가 없는 동안에는 화면 알림·알림음을 내지 않는다", rig.notices().isEmpty())
+        assertEquals(StopReason.DRIVER_AWAY, rig.snapshot().stopReason)
+        rig.set { copy(seatDoorOpen = false) }
+        rig.advance(5)
+        rig.set { copy(seatDoorOpen = true) } // 10초 안에 또 열면 되풀이하지 않는다
+        assertEquals(1, rig.spoken("driver_away_again").size)
+        rig.set { copy(seatDoorOpen = false) }
+        rig.advance(20)
+
+        rig.set { copy(driverDoorOpen = true, driverSeatOccupied = true) } // 운전자가 돌아온다
+        rig.advance(3)
+        val notice = rig.notices().single()
+        assertEquals("away_door_d", notice.situation)
+        assertTrue(notice.urgent)
+        assertEquals(notice.text, rig.snapshot().driverNotice)
+        assertTrue(rig.snapshot().driverNoticeUrgent)
+        rig.advance(8)
+        assertEquals(1, rig.spoken("driver_back").size)
+        rig.advance(60)
+        assertNull("이미 지난 일이라 1분 뒤에는 지운다", rig.snapshot().driverNotice)
+        assertEquals(1, rig.snapshot().counts.safetyNotices)
+    }
+
+    @Test
+    fun `운전자가 내린 동안 동승자 자리가 비면 이탈을 풀지 않고 돌아온 운전자에게 알린다`() {
+        val rig = Rig()
+        rig.startAndDepart()
+        rig.set { copy(gear = Gear.PARK) }
+        rig.set { copy(driverDoorOpen = true, driverSeatOccupied = false) }
+        rig.advance(13)
+        rig.clear()
+        rig.set { copy(seatOccupied = false) } // 어르신이 자리에서 일어났다(문 신호가 없는 차여도)
+        rig.advance(3)
+        assertEquals("운전자가 돌아올 때까지 이탈로 본다", StopReason.DRIVER_AWAY, rig.snapshot().stopReason)
+        assertEquals("driver_away_again", rig.spoken().single().situation)
+        assertTrue("'잠깐 쉬었다 가요' 같은 정차 안내로 넘어가지 않는다", rig.spoken().none { it.situation.startsWith("stop_") })
+        rig.advance(80)
+        assertEquals("운전자를 기다리는 말은 이어 간다", 2, rig.spoken("driver_away_again").size)
+
+        rig.set { copy(driverSeatOccupied = true) } // 운전자가 돌아온다
+        rig.advance(3)
+        assertEquals("away_seat_d", rig.notices().single().situation)
+        assertTrue(rig.snapshot().driverNoticeUrgent)
+        rig.advance(10)
+        assertTrue("동승자가 자리에 없으면 돌아왔다는 말을 하지 않는다", rig.spoken("driver_back").isEmpty())
+    }
+
+    @Test
     fun `출발 전에도 운전자가 내리면 알린다`() {
         val rig = Rig()
         rig.start()
@@ -850,7 +914,8 @@ class CompanionEngineTest {
     }
 
     @Test
-    fun `P단에서는 문이 열려도 알리지 않는다`() {
+    fun `운전자가 차에 있는 P단에서는 문이 열려도 알리지 않는다`() {
+        // 내리는 중일 수 있으므로. 운전자가 내린 동안 열리는 것은 따로 알린다(아래 시험).
         val rig = Rig()
         rig.start()
         rig.advance(15)

@@ -95,6 +95,15 @@ class CompanionEngine(
     private var awayNoticeAt: Long? = null
     /** 이번 이탈에서 동승자에게 안내를 했는지. 하지 않았으면 돌아왔다는 말도 하지 않는다. */
     private var awayAnnounced = false
+    /** 운전자가 없는 동안 동승 좌석 문이 열렸는지 / 동승자 자리가 비었는지. 돌아온 운전자에게 알린다. */
+    private var awayDoorOpened = false
+    private var awaySeatLeft = false
+    private var awayEventAt: Long? = null
+    // 동승 좌석 문·점유가 이번에 바뀌었는지(앞의 값과 견준다)
+    private var lastSeatDoorOpen: Boolean? = null
+    private var lastPassengerSeat: Boolean? = null
+    private var seatDoorJustOpened = false
+    private var passengerJustLeft = false
 
     // 신호 반응(문·창문·안전띠). 한 번의 일(문 한 번 열림 등)마다 번호를 붙여, 되풀이 안내를 한 건으로 센다.
     private var doorAlertAt: Long? = null
@@ -350,7 +359,11 @@ class CompanionEngine(
     private fun updateTrackers(now: Long) {
         val s = signals
         driverSeat.update(s.driverSeatOccupied, now)
-        passengerSeat.update(s.seatOccupied, now)
+        val passengerNow = passengerSeat.update(s.seatOccupied, now)
+        passengerJustLeft = lastPassengerSeat == true && passengerNow == false
+        lastPassengerSeat = passengerNow
+        seatDoorJustOpened = s.seatDoorOpen == true && lastSeatDoorOpen != true
+        lastSeatDoorOpen = s.seatDoorOpen
         val driverDoorJustOpened = s.driverDoorOpen == true && lastDriverDoorOpen != true
         lastDriverDoorOpen = s.driverDoorOpen
         if (s.motion == Motion.PARKED) {
@@ -576,11 +589,32 @@ class CompanionEngine(
                 if (prev != StopReason.DRIVER_AWAY) {
                     // 새 이탈. 마지막 이탈 안내에서 30초가 안 됐으면(좌석 값이 흔들려 다시 들어왔을 수 있다) 되풀이하지 않는다.
                     awayAnnounced = false
+                    awayDoorOpened = seatDoorJustOpened
+                    awaySeatLeft = passengerJustLeft
+                    awayEventAt = null
                     val last = awayNoticeAt
                     if (last == null || now - last >= params.awayReentryGapMs) {
                         awayNoticeAt = now
                         awayAnnounced = true
                         offer(stopCandidate("driver_away", now, StopReason.DRIVER_AWAY, ignoreQuiet = true), now, out)
+                    }
+                } else if (seatDoorJustOpened || passengerJustLeft) {
+                    // 운전자가 없는 동안 동승 좌석 문이 열리거나 자리가 비었다(명세가 '가장 불안한 순간'이라 한 때).
+                    // 바로 다시 안심시키고, 운전자가 돌아오면 그 사실을 알린다. 문을 막지는 못한다(안전장치가 아니다).
+                    if (seatDoorJustOpened) awayDoorOpened = true
+                    if (passengerJustLeft) awaySeatLeft = true
+                    val lastEvent = awayEventAt
+                    if (lastEvent == null || now - lastEvent >= params.awayEventGapMs) {
+                        awayEventAt = now
+                        awayNoticeAt = now
+                        awayAnnounced = true
+                        offer(
+                            Candidate(
+                                "driver_away_again", Priority.SAFETY, SpeechKind.SAFETY, now,
+                                validWhile = StopReason.DRIVER_AWAY, ignoreQuiet = true, eventKey = ++nextEvent,
+                            ),
+                            now, out,
+                        )
                     }
                 } else if (now - (awayNoticeAt ?: now) >= params.driverAwayRepeatMs) {
                     awayNoticeAt = now
@@ -590,8 +624,18 @@ class CompanionEngine(
             }
             StopReason.DRIVER_BACK -> {
                 // 내렸다고 알린 이탈일 때만 돌아왔다고 알린다(말없이 지나간 짧은 이탈 뒤에 "돌아왔어요"만 나오지 않게).
-                if (awayAnnounced) offer(stopCandidate("driver_back", now, validWhile = null, ignoreQuiet = true), now, out)
+                // 동승자가 자리에 없으면 들을 사람이 없으므로 하지 않는다.
+                if (awayAnnounced && passengerSeat.value != false) {
+                    offer(stopCandidate("driver_back", now, validWhile = null, ignoreQuiet = true), now, out)
+                }
+                // 운전자가 없는 동안 생긴 일을 돌아온 운전자에게 알림음과 한 줄로 알린다(1분 동안 보인다).
+                when {
+                    awaySeatLeft -> notify("away_seat_d", urgent = true, now, out, params.awayEventNoticeMs)
+                    awayDoorOpened -> notify("away_door_d", urgent = true, now, out, params.awayEventNoticeMs)
+                }
                 awayAnnounced = false
+                awayDoorOpened = false
+                awaySeatLeft = false
                 // 다음 이탈은 운전석 문이 새로 열려야 본다(앉은 채 좌석 값이 흔들려도 "내렸어요"라고 하지 않게).
                 if (s.driverDoorOpen != null) driverDoorOpenedSincePark = false
             }
@@ -939,6 +983,8 @@ class CompanionEngine(
         /** 운전자 알림의 급한 정도. 큰 것이 화면 한 줄을 먼저 차지한다. */
         private val NOTICE_RANK = mapOf(
             "door_open_d" to 5,
+            "away_seat_d" to 4,
+            "away_door_d" to 3,
             "belt_off_d" to 2,
             "window_open_d" to 1,
             "quiet_off_d" to 0,

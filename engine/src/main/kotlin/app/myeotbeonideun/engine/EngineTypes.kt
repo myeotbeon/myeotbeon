@@ -74,6 +74,10 @@ data class EngineParams(
     val driverAwayRepeatMs: Long = 75_000,
     /** 운전자 이탈에 다시 들어왔을 때 "내렸어요"를 다시 하기까지의 최소 간격(좌석 값 흔들림 대비). */
     val awayReentryGapMs: Long = 30_000,
+    /** 운전자가 없는 동안 문 열림·자리 비움으로 다시 안심시키는 말 사이의 최소 간격. */
+    val awayEventGapMs: Long = 10_000,
+    /** 운전자가 없는 동안 생긴 일(문 열림·자리 비움)을 돌아온 운전자 화면에 보여 두는 시간. */
+    val awayEventNoticeMs: Long = 60_000,
     /** 좌석 점유 값이 바뀌면 이만큼 그대로일 때만 받는다(흔들림 완충). */
     val seatDebounceMs: Long = 2_500,
     /** 주행 중 문이 계속 열려 있을 때 운전자에게 다시 알리는 간격. */

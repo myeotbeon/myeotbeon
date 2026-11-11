@@ -16,7 +16,7 @@ enum class StopReason(val situation: String?) {
      * 내비 없이 가는 길의 목적지에서 "아직 다 온 건 아니에요"라고 하지 않도록, 도착을 부정하지 않는 말을 쓴다.
      */
     PARKED_UNSURE("stop_parked_neutral"),
-    /** P단에서 운전자가 내리고 동승자만 남았다. */
+    /** P단에서 운전자가 내리고 동승자만 남았다. 들어선 뒤로는 운전자가 돌아올 때까지 이어진다. */
     DRIVER_AWAY("driver_away"),
     /** 내렸던 운전자가 돌아왔다(한 번만 나오는 값). */
     DRIVER_BACK("driver_back"),
@@ -63,6 +63,10 @@ object StopClassifier {
 
         if (previous == StopReason.DRIVER_AWAY && input.driverSeatOccupied == true) {
             return StopReason.DRIVER_BACK
+        }
+        // 이탈은 운전자가 돌아올 때까지 이어진다. 그사이 동승자가 자리를 떠도 풀지 않는다(그때가 가장 알아야 할 때다).
+        if (previous == StopReason.DRIVER_AWAY && parked && input.driverSeatOccupied == false) {
+            return StopReason.DRIVER_AWAY
         }
         if (parked &&
             input.driverSeatOccupied == false &&

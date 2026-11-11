@@ -113,7 +113,7 @@ class StopClassifierTest {
     }
 
     @Test
-    fun `동승자도 내렸으면 운전자 이탈 안내를 하지 않는다`() {
+    fun `운전자와 동승자가 함께 내리면 이탈 안내를 시작하지 않는다`() {
         val input = StopInput(
             Motion.PARKED,
             driverSeatOccupied = false,
@@ -121,6 +121,20 @@ class StopClassifierTest {
             passengerSeatOccupied = false,
         )
         assertEquals(StopReason.NONE, classify(input))
+    }
+
+    @Test
+    fun `이탈 중에 동승자가 자리를 떠도 운전자가 돌아올 때까지 이탈로 본다`() {
+        // 전에는 동승 좌석이 비면 이탈이 조용히 풀려, 운전자가 없는 동안 동승자가 내려도 아무 일도 없었다
+        val input = StopInput(
+            Motion.PARKED,
+            parkedForMs = 60_000,
+            driverSeatOccupied = false,
+            driverDoorOpenedSincePark = true,
+            passengerSeatOccupied = false,
+        )
+        assertEquals(StopReason.DRIVER_AWAY, classify(input, previous = StopReason.DRIVER_AWAY))
+        assertEquals(StopReason.DRIVER_BACK, classify(input.copy(driverSeatOccupied = true), previous = StopReason.DRIVER_AWAY))
     }
 
     @Test
