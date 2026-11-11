@@ -209,4 +209,6 @@
     <string name="service_channel">동행 중 안내</string>
     <string name="service_title">몇 번이든 — 동행 중</string>
     <string name="service_text">가는 길을 대신 말해 드리고 있어요</string>
+    <string name="service_channel_urgent">급한 알림</string>
+    <string name="service_channel_urgent_desc">주행 중 문 열림처럼 바로 알아야 할 일을, 앱이 화면 뒤에 있을 때 한 줄로 알려요.</string>
 </resources>

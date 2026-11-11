@@ -988,6 +988,22 @@ class CompanionEngineTest {
     }
 
     @Test
+    fun `운전자 알림의 상황 이름을 함께 내고 되풀이 알림은 글이 바뀌어도 같은 상황이다`() {
+        val rig = Rig()
+        rig.startAndDepart()
+        rig.clear()
+        rig.set { copy(seatDoorOpen = true) }
+        assertEquals("door_open_d", rig.snapshot().driverNoticeSituation)
+        val first = rig.snapshot().driverNotice
+        rig.advance(16) // 15초 뒤 되풀이(대본 변형을 돌려 써서 글이 바뀐다)
+        assertEquals(2, rig.notices().count { it.situation == "door_open_d" })
+        assertNotEquals(first, rig.snapshot().driverNotice)
+        assertEquals("door_open_d", rig.snapshot().driverNoticeSituation)
+        rig.set { copy(seatDoorOpen = false) }
+        assertNull(rig.snapshot().driverNoticeSituation)
+    }
+
+    @Test
     fun `급한 알림이 겹치면 더 급한 것을 보이고 그것이 풀리면 남은 것을 다시 보인다`() {
         val rig = Rig()
         rig.startAndDepart()

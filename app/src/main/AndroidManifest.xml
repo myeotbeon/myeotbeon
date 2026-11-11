@@ -29,6 +29,8 @@
     <!-- 주행 중 안내를 이어 가는 포그라운드 서비스 -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <!-- 급한 운전자 알림(주행 중 문 열림 등)을 앱이 화면 뒤에 있을 때 한 줄 알림으로. 안드로이드 13 이상은 사용자 허용 필요 -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- Pleos TTS 를 쓸 수 없을 때 안드로이드 기본 TTS 엔진을 찾기 위한 선언 -->
     <queries>

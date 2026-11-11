@@ -113,6 +113,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app), DevPanelActions {
     /** 이번 실행에서 속도 권한을 한 번 물었는지(첫 실행 안내에서 다시 조르지 않는다). */
     private val _speedAsked = MutableStateFlow(false)
 
+    /** 이번 실행에서 알림 권한을 한 번 물었는지(동행을 시작할 때마다 조르지 않는다). */
+    var notificationPermissionAsked = false
+
     init {
         // 좌석 값 자동 판별: 운전자가 화면을 조작하는 출발 전 설정(P단)에서는 운전석에 사람이 있다.
         // 그동안 운전석 원시 값으로 그대로·반대로를 정한다(동행 중에는 바꾸지 않는다). 빈칸 채우기보다 먼저 둔다.

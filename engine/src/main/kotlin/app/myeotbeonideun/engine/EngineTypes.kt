@@ -122,6 +122,11 @@ data class EngineSnapshot(
     /** 운전자에게 보이는 알림 한 줄. 여러 개가 떠 있으면 가장 급한 것(풀리면 남은 것이 다시 보인다). */
     val driverNotice: String? = null,
     val driverNoticeUrgent: Boolean = false,
+    /**
+     * 그 알림의 상황 이름(door_open_d 등). 되풀이 알림은 대본의 변형을 돌려 써서 글이 바뀌므로, 바깥(앱 밖 알림)은
+     * 이것으로 같은 일인지 가린다(한 일에 한 번만 알리게).
+     */
+    val driverNoticeSituation: String? = null,
     /** 동승자 카드 두 줄. */
     val cardTitle: String = "",
     val cardStage: String = "",

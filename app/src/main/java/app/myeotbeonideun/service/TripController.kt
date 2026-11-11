@@ -93,6 +93,18 @@ class TripController(private val context: Context, private val c: AppContainer) 
     /** 동행 중인지. */
     val inProgress: Boolean get() = engine != null
 
+    /**
+     * 지금 떠 있는 급한 운전자 알림 한 줄(주행 중 문 열림 등). 없으면 null.
+     * 진행 중 알림의 글과, 앱이 화면 뒤에 있을 때의 한 줄 알림(헤드업)에 쓴다(결함 11, [TripNotifications]).
+     */
+    var urgentLine: String? = null
+        private set
+    private var urgentSituation: String? = null
+
+    /** 알림에 지금 올려 둔 것. 같은 글로 다시 올리지 않는다(되풀이 알람 금지). */
+    private var ongoingShown: String? = null
+    private var headsUpShown: String? = null
+
     private fun now() = SystemClock.elapsedRealtime()
 
     /** 동행을 시작한다. 설정은 '자주 가는 길'로 저장된다. */
@@ -113,6 +125,10 @@ class TripController(private val context: Context, private val c: AppContainer) 
         arrivedAtMs = null
         finishing = null
         savedPoint = null
+        urgentLine = null
+        urgentSituation = null
+        ongoingShown = null
+        headsUpShown = null
 
         src.setTripActive(true)
         if (saved.rememberArrival && saved.arrivalLat != null && saved.arrivalLon != null) {
@@ -139,6 +155,10 @@ class TripController(private val context: Context, private val c: AppContainer) 
                     autoEndAfterArrival()
                     finishIfDone()
                 }
+            }
+            launch {
+                // 앱이 화면 뒤로 가면 떠 있는 급한 알림을 한 줄 알림으로, 앞으로 오면 그 알림을 지운다.
+                c.foreground.collect { syncAlerts() }
             }
             launch {
                 // 차가 말하는 동안에는 듣지 않는다.
@@ -224,8 +244,13 @@ class TripController(private val context: Context, private val c: AppContainer) 
         source = null
         route = null
         finishing = null
+        urgentLine = null
+        urgentSituation = null
+        ongoingShown = null
+        headsUpShown = null
         _ui.value = null
         CompanionService.stop(context)
+        TripNotifications.cancelAll(context)
     }
 
     private fun perform(actions: List<EngineAction>) {
@@ -275,6 +300,38 @@ class TripController(private val context: Context, private val c: AppContainer) 
         val t = now()
         val snapshot = e.snapshot(t)
         _ui.value = TripUi(cfg, snapshot, src.kind, t, endingAfterArrival = finishing != null)
+        // 같은 일인지는 상황 이름으로 가린다. 되풀이 알림(문이 열려 있는 동안 15초마다)은 대본 변형을 돌려 써서 글이
+        // 바뀌지만 같은 일이다 — 처음 글을 그대로 두고 다시 알리지 않는다.
+        val situation = snapshot.driverNoticeSituation?.takeIf { snapshot.driverNoticeUrgent && snapshot.driverNotice != null }
+        if (situation != urgentSituation) {
+            urgentSituation = situation
+            urgentLine = situation?.let { snapshot.driverNotice }
+        }
+        syncAlerts()
+    }
+
+    /**
+     * 급한 운전자 알림을 앱 밖에도 보인다(결함 11). 포그라운드 서비스를 둔 까닭이 '주행 중에는 내비가 앞에 있다'인데,
+     * 그때 화면 안의 붉은 한 줄은 보이지 않는다.
+     * - 진행 중 알림의 글을 그 한 줄로 바꾸고, 풀리면 평소 글로 되돌린다.
+     * - 앱이 화면 뒤에 있으면 중요도 높음 채널의 한 줄 알림(헤드업)으로도 낸다. 앱이 앞에 있거나 풀리면 지운다.
+     * 같은 글은 다시 올리지 않는다(문이 열려 있는 동안 15초마다 오는 되풀이 알림은 알림음만 낸다).
+     */
+    private fun syncAlerts() {
+        if (engine == null) return
+        val line = urgentLine
+        if (line != ongoingShown) {
+            ongoingShown = line
+            TripNotifications.updateOngoing(context, line)
+        }
+        val wantHeadsUp = line != null && !c.foreground.value
+        if (wantHeadsUp && line != headsUpShown) {
+            headsUpShown = line
+            TripNotifications.showUrgent(context, line!!)
+        } else if (!wantHeadsUp && headsUpShown != null) {
+            headsUpShown = null
+            TripNotifications.cancelUrgent(context)
+        }
     }
 
     /**

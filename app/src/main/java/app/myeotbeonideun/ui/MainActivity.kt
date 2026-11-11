@@ -3,6 +3,7 @@ package app.myeotbeonideun.ui
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.PermissionInfo
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -50,6 +51,10 @@ class MainActivity : ComponentActivity() {
             vm.onSpeedPermissionResult(granted)
         }
 
+    /** 알림 권한(안드로이드 13 이상). 결과와 상관없이 앱은 동작한다(허용하지 않으면 급한 한 줄 알림이 보이지 않을 뿐). */
+    private val notificationPermission =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+
     /** 음성 권한이 '사용자 허용'이 필요한 종류인 차에서만 묻는다. 결과와 상관없이 앱은 동작한다. */
     private val speechPermissions =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
@@ -67,6 +72,7 @@ class MainActivity : ComponentActivity() {
                     vm = vm,
                     onNeedLocationPermission = ::requestLocationPermission,
                     onNeedSpeedPermission = { speedPermission.launch(AppViewModel.PERMISSION_SPEED) },
+                    onTripStarting = ::requestNotificationPermissionIfNeeded,
                 )
             }
         }
@@ -102,10 +108,25 @@ class MainActivity : ComponentActivity() {
         if (needed.isNotEmpty()) speechPermissions.launch(needed.toTypedArray())
     }
 
+    /**
+     * 급한 운전자 알림(주행 중 문 열림 등)을 앱이 화면 뒤에 있을 때 한 줄 알림으로 보이려면 안드로이드 13 이상에서는
+     * 알림 권한이 있어야 한다(결함 11). 출발 전 설정에서 동행을 시작할 때(정차 중) 이번 실행에서 한 번만 묻는다.
+     */
+    private fun requestNotificationPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU || vm.notificationPermissionAsked) return
+        if (checkSelfPermission(PERMISSION_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) return
+        vm.notificationPermissionAsked = true
+        notificationPermission.launch(PERMISSION_NOTIFICATIONS)
+    }
+
     /** '도착 지점 기억'을 켤 때만 위치 권한을 묻는다. */
     private fun requestLocationPermission() {
         val permission = AppViewModel.PERMISSION_LOCATION
         if (checkSelfPermission(permission) != PackageManager.PERMISSION_GRANTED) locationPermission.launch(permission)
+    }
+
+    private companion object {
+        const val PERMISSION_NOTIFICATIONS = "android.permission.POST_NOTIFICATIONS"
     }
 }
 
@@ -114,6 +135,7 @@ fun MyeotbeonApp(
     vm: AppViewModel,
     onNeedLocationPermission: () -> Unit,
     onNeedSpeedPermission: () -> Unit,
+    onTripStarting: () -> Unit = {},
 ) {
     val shell by vm.shell.collectAsStateWithLifecycle()
     val companion by vm.companion.collectAsStateWithLifecycle()
@@ -143,8 +165,14 @@ fun MyeotbeonApp(
                         if (form.rememberArrival && !setup.form.rememberArrival) onNeedLocationPermission()
                         vm.updateForm(form)
                     },
-                    onStart = vm::startTrip,
-                    onStartRoute = vm::startRoute,
+                    onStart = {
+                        onTripStarting()
+                        vm.startTrip()
+                    },
+                    onStartRoute = { route ->
+                        onTripStarting()
+                        vm.startRoute(route)
+                    },
                     onDeleteRoute = vm::deleteRoute,
                 )
             }

@@ -332,6 +332,7 @@ class CompanionEngine(
             lastLineAtMs = lastLineAt,
             driverNotice = top?.text,
             driverNoticeUrgent = top?.urgent ?: false,
+            driverNoticeSituation = top?.situation,
             cardTitle = script.at("card_title", 0) ?: config.place,
             cardStage = cardStageLine(),
             counts = counts,
