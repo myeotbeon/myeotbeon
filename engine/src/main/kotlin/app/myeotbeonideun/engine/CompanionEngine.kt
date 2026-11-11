@@ -637,7 +637,7 @@ class CompanionEngine(
                 // 내렸다고 알린 이탈일 때만 돌아왔다고 알린다(말없이 지나간 짧은 이탈 뒤에 "돌아왔어요"만 나오지 않게).
                 // 동승자가 자리에 없으면 들을 사람이 없으므로 하지 않는다.
                 if (awayAnnounced && passengerSeat.value != false) {
-                    offer(stopCandidate("driver_back", now, validWhile = null, ignoreQuiet = true), now, out)
+                    offer(stopCandidate(driverBackSituation(), now, validWhile = null, ignoreQuiet = true), now, out)
                 }
                 // 운전자가 없는 동안 생긴 일을 돌아온 운전자에게 알림음과 한 줄로 알린다(1분 동안 보인다).
                 when {
@@ -821,6 +821,15 @@ class CompanionEngine(
         val meters = signals.nav.remainMeters
         return meters == null || meters > WAYPOINT_MIN_REMAIN_METERS
     }
+
+    /**
+     * 내렸던 운전자가 돌아왔을 때의 말. "다시 출발해요"(driver_back)는 출발한 뒤 내비가 아직 넉넉히 남았다고 할 때
+     * (경유지 정차)만 쓴다. 그 밖 — 내비 없는 길이나 곧 도착 구간의 정차(도착일 수 있다), 출발 전 — 에는 출발을 말하지 않는
+     * driver_back_parked("돌아왔어요. 편히 앉아 계세요.")를 쓴다. 바로 뒤에 운전자가 '도착했어요'를 누르면 "다 왔어요"가
+     * 이어지는데, 그 앞에서 "다시 출발해요"라고 하면 반대되는 사실을 연달아 말하게 된다(검토 NEW-3).
+     */
+    private fun driverBackSituation(): String =
+        if (phase == Phase.DRIVING && navSaysFar()) "driver_back" else "driver_back_parked"
 
     /** 지금 이 순간의 사실을 말하는 상황 이름. '다시 말씀드리기'가 쓰는 것. */
     private fun currentFactSituation(): String = when {

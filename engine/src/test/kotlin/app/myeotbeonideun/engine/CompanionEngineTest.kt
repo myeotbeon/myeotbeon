@@ -733,6 +733,46 @@ class CompanionEngineTest {
     }
 
     @Test
+    fun `도착일 수도 있는 정차에서 운전자가 돌아오면 다시 출발한다고 하지 않고 바로 이어 도착을 알려도 어긋나지 않는다`() {
+        fun backLine(nav: NavState, depart: Boolean = true): Pair<Rig, Speak> {
+            val rig = Rig()
+            rig.signals = rig.signals.copy(nav = nav)
+            if (depart) rig.startAndDepart() else { rig.start(); rig.advance(15) }
+            rig.set { copy(gear = Gear.PARK) }
+            rig.advance(8)
+            rig.set { copy(driverDoorOpen = true, driverSeatOccupied = false) }
+            rig.advance(10)
+            rig.set { copy(driverSeatOccupied = true, driverDoorOpen = false) }
+            rig.advance(10)
+            return rig to rig.spoken().last { it.situation.startsWith("driver_back") }
+        }
+        val forbidden = listOf("출발", "가요", "다 왔", "도착", "아직")
+
+        // 내비 없이 간 길(시연 순서 A): 정차 문장 → 내림 → 돌아옴 → '도착했어요'
+        val (rig, back) = backLine(NavState())
+        assertEquals("driver_back_parked", back.situation)
+        assertTrue(back.text, back.text.startsWith("어머니, 따님이"))
+        forbidden.forEach { assertFalse("$it: ${back.text}", back.text.contains(it)) }
+        rig.clear()
+        rig.confirmArrival() // 돌아온 운전자의 말이 끝나면 이어서 "다 왔어요"
+        rig.advance(5)
+        assertEquals(listOf("arrive"), rig.spoken().map { it.situation })
+
+        // 곧 도착 구간의 정차와 출발 전에도 출발을 말하지 않는다
+        assertEquals("driver_back_parked", backLine(NavState(guiding = true, totalSec = 2400, remainSec = 200)).second.situation)
+        assertEquals("driver_back_parked", backLine(NavState(), depart = false).second.situation)
+        // 내비가 넉넉히 남았다고 하는 정차(경유지)에서만 "다시 출발해요"
+        val far = backLine(NavState(guiding = true, totalSec = 2400, remainSec = 1500, remainMeters = 9_000)).second
+        assertEquals("driver_back", far.situation)
+        assertTrue(far.text, far.text.contains("출발"))
+
+        // 대본의 네 변형 모두 출발·도착을 단정하지 않는다
+        val lines = TestScripts.book.situation("driver_back_parked")!!.lines
+        assertEquals(4, lines.size)
+        for (line in lines) forbidden.forEach { assertFalse("$it: $line", line.contains(it)) }
+    }
+
+    @Test
     fun `좌석 점유가 잠깐 흔들리면 운전자가 내렸다고 하지 않는다`() {
         val rig = Rig()
         rig.startAndDepart()

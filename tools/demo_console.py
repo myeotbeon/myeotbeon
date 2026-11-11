@@ -94,9 +94,10 @@ STEPS: List[Step] = [
          expect="붉은 한 줄 “같이 탄 분 쪽 문이 열렸어요.”와 알림음, 동승자: “어머니, 문은 닫아 주세요. 아직 가는 중이에요.” "
                 "(차 자체의 '도어 열림' 경고도 계기판에 뜬다)"),
     Step("문 닫기", ["body?door_rr=false"], hold=2, expect="붉은 한 줄이 사라진다"),
-    Step("내비 없는 길에서 P단으로 서기", ["controls?speed=0&accelerator=0&brake=100", "gear?gear=Park"], hold=8,
-         expect="5초쯤 뒤 “어머니, 차를 세웠어요. 따님이 알려 드릴 때까지 앉아 계세요.”(도착을 부정하지 않는 말). "
-                "아래 줄에 '도착했어요'·'동행 끝내기'가 보인다"),
+    Step("가는 길에 잠깐 들름: P단으로 서기(내비 안내 없이 간 길)",
+         ["controls?speed=0&accelerator=0&brake=100", "gear?gear=Park"], hold=8,
+         expect="5초쯤 뒤 “어머니, 차를 세웠어요. 따님이 알려 드릴 때까지 앉아 계세요.”(도착인지 모르므로 도착을 부정하지 않는 말). "
+                "아래 줄에 '도착했어요'·'동행 끝내기'가 보인다 — 여기서는 누르지 않는다"),
     Step("운전자가 내림: 운전석 문 열림 → 운전석 비움 → 문 닫힘",
          ["body?door_fl=true", "seat?kind=occupied&area=driver&value=false", "body?door_fl=false"], hold=6,
          expect="2.5초쯤 뒤 “어머니, 따님이 잠깐 내렸어요. 금방 돌아와요.”(75초마다 짧게 다시)"),
@@ -105,8 +106,13 @@ STEPS: List[Step] = [
     Step("(선택) 그 문 닫기", ["body?door_rr=false"], hold=1, optional=True),
     Step("운전자가 돌아옴: 운전석 문 열림 → 운전석에 앉음 → 문 닫힘",
          ["body?door_fl=true", "seat?kind=occupied&area=driver&value=true", "body?door_fl=false"], hold=6,
-         expect="“어머니, 따님이 돌아왔어요. 다시 출발해요.” 앞의 선택 단계를 했으면 붉은 한 줄 "
-                "“차에서 내린 사이 같이 탄 분 쪽 문이 열렸어요.”와 알림음(1분)"),
+         expect="“어머니, 따님이 돌아왔어요. 편히 앉아 계세요.”(도착일 수도 있는 정차라 출발을 말하지 않는다). "
+                "앞의 선택 단계를 했으면 붉은 한 줄 “차에서 내린 사이 같이 탄 분 쪽 문이 열렸어요.”와 알림음(1분)"),
+    Step("다시 출발: D단, 속도 30", ["gear?gear=Drive", "controls?speed=30&accelerator=15&brake=0"], hold=10,
+         expect="따로 출발 안내는 하지 않는다. '도착했어요'·'동행 끝내기'가 사라지고 메뉴의 출발·기록·설정이 잠긴다"),
+    Step("목적지에서 P단으로 서기", ["controls?speed=0&accelerator=0&brake=100", "gear?gear=Park"], hold=8,
+         expect="5초쯤 뒤 정차 문장의 다른 표현 “어머니, 차가 잠깐 섰어요. 따님이 도와 드릴 때까지 앉아 계세요.” "
+                "아래 줄에 '도착했어요'"),
     Step("'도착했어요'", [],
          app="정차 중 아래 줄의 '도착했어요'를 누른다",
          expect="“어머니, 큰딸 집에 다 왔어요. 따님이 올 때까지 앉아 계세요.” 말이 끝나면 동행이 끝나고 '오늘의 기록'으로 넘어간다"),

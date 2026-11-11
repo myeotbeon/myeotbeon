@@ -21,7 +21,10 @@ enum class StopReason(val situation: String?) {
     PARKED_UNSURE("stop_parked_neutral"),
     /** P단에서 운전자가 내리고 동승자만 남았다. 들어선 뒤로는 운전자가 돌아올 때까지 이어진다. */
     DRIVER_AWAY("driver_away"),
-    /** 내렸던 운전자가 돌아왔다(한 번만 나오는 값). */
+    /**
+     * 내렸던 운전자가 돌아왔다(한 번만 나오는 값). 말은 엔진이 고른다: 내비가 넉넉히 남았다고 하는 정차면 "다시 출발해요"
+     * (driver_back), 도착일 수도 있는 정차나 출발 전이면 출발을 말하지 않는 driver_back_parked.
+     */
     DRIVER_BACK("driver_back"),
     ARRIVED("arrive"),
 }

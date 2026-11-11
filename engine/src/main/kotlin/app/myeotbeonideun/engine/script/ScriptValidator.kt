@@ -86,6 +86,8 @@ object ScriptValidator {
         "driver_away" to Audience.PASSENGER,
         "driver_away_again" to Audience.PASSENGER,
         "driver_back" to Audience.PASSENGER,
+        // 도착일 수도 있는 정차(내비 없는 길, 곧 도착 구간, 출발 전)에서 운전자가 돌아왔을 때: 출발을 말하지 않는다
+        "driver_back_parked" to Audience.PASSENGER,
         "door_open_p" to Audience.PASSENGER,
         "window_open_p" to Audience.PASSENGER,
         "belt_off_p" to Audience.PASSENGER,
