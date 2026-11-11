@@ -1,6 +1,8 @@
 package app.myeotbeonideun
 
 import android.os.Looper
+import androidx.lifecycle.Lifecycle
+import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import app.myeotbeonideun.engine.model.Gear
 import app.myeotbeonideun.engine.model.SeatPosition
@@ -18,7 +20,6 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
@@ -43,7 +44,7 @@ class SeatReadingAppTest {
 
     @Test
     fun `출발 전 설정(P단)에서 운전석 기준으로 판별해 앉은 자리를 해석한 값으로 고른다`() {
-        val activity = Robolectric.buildActivity(MainActivity::class.java).setup() // 화면이 보인다
+        val activity = ActivityScenario.launch(MainActivity::class.java) // 화면이 보인다
         fake.state.value = VehicleState(gear = Gear.PARK, uxRestricted = false)
         emulatorLikeSeats()
         val vm = AppViewModel(app)
@@ -58,30 +59,30 @@ class SeatReadingAppTest {
         assertEquals("좌석 값: 반대로(운전석 기준 자동)", vm.dev.value.seatReadingLine)
         assertTrue(vm.dev.value.rawValuesLine!!, vm.dev.value.rawValuesLine!!.contains("운전석 false"))
         assertTrue(vm.dev.value.rawValuesLine!!.contains("안전띠"))
-        activity.pause().stop().destroy()
+        activity.close()
     }
 
     @Test
     fun `주행 중이거나 화면이 뒤에 있으면 판별하지 않는다`() {
-        val activity = Robolectric.buildActivity(MainActivity::class.java).setup()
+        val activity = ActivityScenario.launch(MainActivity::class.java)
         fake.state.value = VehicleState(gear = Gear.DRIVE, uxRestricted = true)
         emulatorLikeSeats()
         AppViewModel(app)
         idle()
         assertEquals(SeatPolarityBasis.NO_DRIVER_VALUE, fake.seatInterpretation.value.basis)
 
-        activity.pause().stop()
+        activity.moveToState(Lifecycle.State.CREATED) // 화면이 뒤로 갔다
         idle(2_000)
         fake.state.value = VehicleState(gear = Gear.PARK, uxRestricted = false)
         emulatorLikeSeats()
         idle()
         assertEquals("화면이 보이지 않으면 운전자가 조작한다고 볼 수 없다", SeatPolarityBasis.NO_DRIVER_VALUE, fake.seatInterpretation.value.basis)
-        activity.destroy()
+        activity.close()
     }
 
     @Test
     fun `동행을 시작하면 그 순간 정하고 동행 중에는 바꾸지 않는다`() {
-        val activity = Robolectric.buildActivity(MainActivity::class.java).setup()
+        val activity = ActivityScenario.launch(MainActivity::class.java)
         fake.state.value = VehicleState(gear = Gear.PARK, uxRestricted = false)
         emulatorLikeSeats()
         val vm = AppViewModel(app)
@@ -104,7 +105,7 @@ class SeatReadingAppTest {
         app.container.trip.end()
         idle()
         assertFalse(fake.seatInterpretation.value.heldForTrip)
-        activity.pause().stop().destroy()
+        activity.close()
     }
 
     @Test

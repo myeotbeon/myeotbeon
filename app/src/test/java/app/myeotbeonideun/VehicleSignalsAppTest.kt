@@ -9,6 +9,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.lifecycle.ViewModelProvider
+import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import app.myeotbeonideun.engine.model.Gear
 import app.myeotbeonideun.gleo.Gleo
@@ -29,7 +30,6 @@ import org.junit.Rule
 import org.junit.Test
 import org.json.JSONObject
 import org.junit.runner.RunWith
-import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
@@ -134,14 +134,16 @@ class VehicleSourceChoiceTest {
     fun `실차 주행 중 Gleo 로 동행 시작을 부르면 시작하지 않고 동행 화면에서 기다린다`() {
         c().store.saveRoute(TripConfig(place = "큰딸 집"), rememberArrival = false, nowMs = 1_000)
         fake.state.value = VehicleState(gear = Gear.DRIVE, uxRestricted = true)
-        val activity = Robolectric.buildActivity(MainActivity::class.java, Intent(Gleo.ACTION_START)).setup()
+        val activity = ActivityScenario.launch<MainActivity>(Intent(app, MainActivity::class.java).setAction(Gleo.ACTION_START))
         idle()
         assertFalse(c().trip.inProgress)
-        val vm = ViewModelProvider(activity.get())[AppViewModel::class.java]
-        assertEquals(Screen.COMPANION, vm.shell.value.screen)
-        assertEquals("차를 세운 뒤 출발 전 설정에서 시작하세요 안내가 보이는 화면", false, vm.companion.value.active)
-        assertTrue(vm.companion.value.restricted)
-        activity.pause().stop().destroy()
+        activity.onActivity { a ->
+            val vm = ViewModelProvider(a)[AppViewModel::class.java]
+            assertEquals(Screen.COMPANION, vm.shell.value.screen)
+            assertEquals("차를 세운 뒤 출발 전 설정에서 시작하세요 안내가 보이는 화면", false, vm.companion.value.active)
+            assertTrue(vm.companion.value.restricted)
+        }
+        activity.close()
     }
 
     private fun c() = app.container
