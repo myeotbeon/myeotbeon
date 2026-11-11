@@ -53,7 +53,9 @@ class MainActivity : ComponentActivity() {
 
     /** 알림 권한(안드로이드 13 이상). 결과와 상관없이 앱은 동작한다(허용하지 않으면 급한 한 줄 알림이 보이지 않을 뿐). */
     private val notificationPermission =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            vm.onNotificationPermissionResult(granted)
+        }
 
     /** 음성 권한이 '사용자 허용'이 필요한 종류인 차에서만 묻는다. 결과와 상관없이 앱은 동작한다. */
     private val speechPermissions =
@@ -72,7 +74,7 @@ class MainActivity : ComponentActivity() {
                     vm = vm,
                     onNeedLocationPermission = ::requestLocationPermission,
                     onNeedSpeedPermission = { speedPermission.launch(AppViewModel.PERMISSION_SPEED) },
-                    onTripStarting = ::requestNotificationPermissionIfNeeded,
+                    onNeedNotificationPermission = ::requestNotificationPermission,
                 )
             }
         }
@@ -110,13 +112,17 @@ class MainActivity : ComponentActivity() {
 
     /**
      * 급한 운전자 알림(주행 중 문 열림 등)을 앱이 화면 뒤에 있을 때 한 줄 알림으로 보이려면 안드로이드 13 이상에서는
-     * 알림 권한이 있어야 한다(결함 11). 출발 전 설정에서 동행을 시작할 때(정차 중) 이번 실행에서 한 번만 묻는다.
+     * 알림 권한이 있어야 한다(결함 11). 첫 실행 안내(정차 중)와 환경설정의 '알림 허용하기'로만 묻는다.
+     * 동행을 시작할 때는 묻지 않는다 — 시스템 창이 소개말 동안 동행 화면을 덮고, 답하지 않고 출발하면 주행 중 화면에
+     * 작은 글과 버튼의 대화 상자가 남는다(검토 NEW-4).
      */
-    private fun requestNotificationPermissionIfNeeded() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU || vm.notificationPermissionAsked) return
-        if (checkSelfPermission(PERMISSION_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) return
-        vm.notificationPermissionAsked = true
-        notificationPermission.launch(PERMISSION_NOTIFICATIONS)
+    private fun requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        if (checkSelfPermission(AppViewModel.PERMISSION_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
+            vm.onNotificationPermissionResult(true)
+            return
+        }
+        notificationPermission.launch(AppViewModel.PERMISSION_NOTIFICATIONS)
     }
 
     /** '도착 지점 기억'을 켤 때만 위치 권한을 묻는다. */
@@ -125,9 +131,6 @@ class MainActivity : ComponentActivity() {
         if (checkSelfPermission(permission) != PackageManager.PERMISSION_GRANTED) locationPermission.launch(permission)
     }
 
-    private companion object {
-        const val PERMISSION_NOTIFICATIONS = "android.permission.POST_NOTIFICATIONS"
-    }
 }
 
 @Composable
@@ -135,7 +138,7 @@ fun MyeotbeonApp(
     vm: AppViewModel,
     onNeedLocationPermission: () -> Unit,
     onNeedSpeedPermission: () -> Unit,
-    onTripStarting: () -> Unit = {},
+    onNeedNotificationPermission: () -> Unit = {},
 ) {
     val shell by vm.shell.collectAsStateWithLifecycle()
     val companion by vm.companion.collectAsStateWithLifecycle()
@@ -145,6 +148,7 @@ fun MyeotbeonApp(
         onNavigate = vm::navigate,
         onAcceptNotice = vm::acceptNotice,
         onRequestSpeedPermission = onNeedSpeedPermission,
+        onRequestNotificationPermission = onNeedNotificationPermission,
     ) { screen, wide ->
         when (screen) {
             Screen.COMPANION -> CompanionScreen(
@@ -165,14 +169,9 @@ fun MyeotbeonApp(
                         if (form.rememberArrival && !setup.form.rememberArrival) onNeedLocationPermission()
                         vm.updateForm(form)
                     },
-                    onStart = {
-                        onTripStarting()
-                        vm.startTrip()
-                    },
-                    onStartRoute = { route ->
-                        onTripStarting()
-                        vm.startRoute(route)
-                    },
+                    // 동행 시작 경로에서는 권한 창을 띄우지 않는다(알림 권한은 첫 실행 안내·환경설정에서).
+                    onStart = vm::startTrip,
+                    onStartRoute = vm::startRoute,
                     onDeleteRoute = vm::deleteRoute,
                 )
             }
@@ -194,6 +193,7 @@ fun MyeotbeonApp(
                     onClearAll = vm::clearAll,
                     onOpenDevPanel = { vm.navigate(Screen.DEV) },
                     onSeatReading = vm::setSeatReading,
+                    onRequestNotificationPermission = onNeedNotificationPermission,
                 )
             }
 

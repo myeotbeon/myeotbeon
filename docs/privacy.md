@@ -48,7 +48,7 @@
 | `pleos.car.permission.FUSED_LOCATION` | 도착 지점 기억과 근접 알림 | **사용자 허용**(dangerous). '도착 지점 기억하기'를 켤 때만 |
 | `android.car.permission.CAR_POWERTRAIN` | 변속단 | 설치 때 |
 | `android.car.permission.CAR_SPEED` | 속도(정지 판단 보조) | **사용자 허용**(dangerous). 첫 실행 안내(정차 중)에서 한 번 권하고, 환경설정의 `속도 신호 허용하기`로도. 허용 창은 '위치 정보에 액세스'로 뜬다(에뮬레이터, 위치 권한 묶음). 허용하지 않아도 앱은 돈다 |
-| `android.permission.POST_NOTIFICATIONS` | 앱이 화면 뒤에 있을 때 급한 운전자 알림을 한 줄 알림으로 | **사용자 허용**(안드로이드 13 이상). 출발 전 설정에서 동행을 시작할 때(정차 중) 그 실행에서 한 번. 허용하지 않아도 앱은 돈다 |
+| `android.permission.POST_NOTIFICATIONS` | 앱이 화면 뒤에 있을 때 급한 운전자 알림을 한 줄 알림으로 | **사용자 허용**(안드로이드 13 이상). 첫 실행 안내(정차 중)에서 한 번 권하고, 환경설정의 `알림 허용하기`로도. 동행을 시작할 때는 묻지 않는다(시스템 창이 동행 화면을 덮지 않게). 허용하지 않아도 앱은 돈다 |
 | `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_MEDIA_PLAYBACK` | 동행 중 안내 유지 | 설치 때 |
 
 - 사용자 허용이 필요한 권한이 셋(위치, 속도, 알림) 있으므로, 기획서·영상에서 '일반 권한만 쓴다'고 쓰면 사실과 다릅니다.

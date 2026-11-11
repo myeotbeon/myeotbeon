@@ -2,6 +2,7 @@ package app.myeotbeonideun.ui
 
 import android.app.Application
 import android.content.pm.PackageManager
+import android.os.Build
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import app.myeotbeonideun.App
@@ -72,11 +73,26 @@ enum class SpeedAsk {
 }
 
 /**
+ * 첫 실행 안내에서 알림(POST_NOTIFICATIONS, 안드로이드 13 이상) 허용을 권하는지(검토 NEW-4).
+ * 알림 권한은 정차 중의 첫 실행 안내와 환경설정에서만 묻는다. 동행을 시작할 때 물으면 시스템 창이 소개말 동안 동행 화면을 덮고,
+ * 답하지 않고 출발하면 주행 중 화면에 작은 글과 버튼의 대화 상자가 남는다.
+ */
+enum class NotifyAsk {
+    /** 권하지 않는다(안드로이드 12 이하이거나 이미 허용했다). */
+    HIDDEN,
+    /** '알림 허용하기' 버튼을 보인다. */
+    SUGGEST,
+    /** 한 번 물었고 허용하지 않았다. 환경설정에서 허용할 수 있다고만 적는다. */
+    DECLINED,
+}
+
+/**
  * 화면 틀(메뉴, 알림표)이 그리는 데 필요한 것.
  *
  * @property restricted 주행 중 화면 잠금(지금 신호 출처의 규제 OR 실차의 규제)
  * @property vehicleRestricted 실차가 주행 규제 중인지(체험 모드여도 실제 차의 값)
  * @property speedAsk 첫 실행 안내(정차 중에만 보인다)에서 속도 신호 허용을 권하는지
+ * @property notifyAsk 첫 실행 안내에서 알림 허용을 권하는지
  */
 data class ShellUi(
     val screen: Screen = Screen.SETUP,
@@ -86,6 +102,7 @@ data class ShellUi(
     val noticeAccepted: Boolean = true,
     val vehicleRestricted: Boolean = false,
     val speedAsk: SpeedAsk = SpeedAsk.HIDDEN,
+    val notifyAsk: NotifyAsk = NotifyAsk.HIDDEN,
 ) {
     /**
      * 지금 화면 대신 잠금 안내를 보이는지. 정차 전용 화면은 주행 중에 잠근다.
@@ -116,8 +133,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app), DevPanelActions {
     /** 이번 실행에서 속도 권한을 한 번 물었는지(첫 실행 안내에서 다시 조르지 않는다). */
     private val _speedAsked = MutableStateFlow(false)
 
-    /** 이번 실행에서 알림 권한을 한 번 물었는지(동행을 시작할 때마다 조르지 않는다). */
-    var notificationPermissionAsked = false
+    private val _notifyGranted = MutableStateFlow(checkNotificationPermission())
+    /** 이번 실행에서 알림 권한을 한 번 물었는지(첫 실행 안내에서 다시 조르지 않는다). */
+    private val _notifyAsked = MutableStateFlow(false)
 
     init {
         // 좌석 값 자동 판별: 운전자가 화면을 조작하는 출발 전 설정(P단)에서는 운전석에 사람이 있다.
@@ -143,21 +161,25 @@ class AppViewModel(app: Application) : AndroidViewModel(app), DevPanelActions {
 
     // ───────────────────────── 화면 틀 ─────────────────────────
 
+    private data class ShellExtras(val kind: SourceKind, val noticeAccepted: Boolean, val speedAsk: SpeedAsk, val notifyAsk: NotifyAsk)
+
     val shell: StateFlow<ShellUi> =
         combine(
             _screen, c.drivingRestricted, c.vehicleRestricted, c.trip.ui,
-            combine(sourceKind, c.store.settings, _speedGranted, _speedAsked) { kind, settings, granted, asked ->
-                Triple(kind, settings, speedAsk(granted, asked))
+            combine(sourceKind, c.store.settings, _speedGranted, _speedAsked, combine(_notifyGranted, _notifyAsked, ::notifyAsk)) {
+                    kind, settings, granted, asked, notify ->
+                ShellExtras(kind, settings.noticeAccepted, speedAsk(granted, asked), notify)
             },
-        ) { screen, restricted, vehicleRestricted, trip, (kind, settings, speedAsk) ->
+        ) { screen, restricted, vehicleRestricted, trip, extras ->
             ShellUi(
                 screen = screen,
                 restricted = restricted,
                 tripActive = trip != null,
-                demo = kind == SourceKind.DEMO,
-                noticeAccepted = settings.noticeAccepted,
+                demo = extras.kind == SourceKind.DEMO,
+                noticeAccepted = extras.noticeAccepted,
                 vehicleRestricted = vehicleRestricted,
-                speedAsk = speedAsk,
+                speedAsk = extras.speedAsk,
+                notifyAsk = extras.notifyAsk,
             )
         }.stateIn(viewModelScope, SharingStarted.Eagerly, ShellUi(_screen.value))
 
@@ -169,6 +191,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app), DevPanelActions {
         !c.isAutomotive || granted -> SpeedAsk.HIDDEN
         asked -> SpeedAsk.DECLINED
         else -> SpeedAsk.SUGGEST
+    }
+
+    /** 알림 권한이 없으면(안드로이드 13 이상) 첫 실행 안내에서 한 번 권한다. 허용하지 않아도 앱은 그대로 돈다. */
+    private fun notifyAsk(granted: Boolean, asked: Boolean): NotifyAsk = when {
+        granted -> NotifyAsk.HIDDEN
+        asked -> NotifyAsk.DECLINED
+        else -> NotifyAsk.SUGGEST
     }
 
     fun navigate(screen: Screen) {
@@ -354,12 +383,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app), DevPanelActions {
         val speedGranted: Boolean,
         val vehicleStatus: SourceStatus,
         val seat: SeatInterpretation,
+        val notifyGranted: Boolean,
     )
 
     val settings: StateFlow<SettingsUi> =
         combine(
             c.store.settings, sourceKind, capabilities, c.speech.engineName,
-            combine(c.listener.state, _speedGranted, c.vehicleSource.status, c.vehicleSource.seatInterpretation, ::SettingsExtras),
+            combine(
+                c.listener.state, _speedGranted, c.vehicleSource.status, c.vehicleSource.seatInterpretation, _notifyGranted,
+                ::SettingsExtras,
+            ),
         ) { settings, kind, cap, engine, extras ->
             SettingsUi(
                 settings = settings,
@@ -372,6 +405,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app), DevPanelActions {
                 versionName = BuildConfig.VERSION_NAME,
                 vehicleStatus = extras.vehicleStatus,
                 seatReadingLine = if (c.isAutomotive) seatReadingLine(extras.seat) else null,
+                notificationPermissionNeeded = !extras.notifyGranted,
             )
         }.stateIn(viewModelScope, SharingStarted.Eagerly, SettingsUi())
 
@@ -422,6 +456,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app), DevPanelActions {
         // 구독 전체를 놓았다 붙이지 않고 속도 신호만 다시 붙인다(동행 중의 좌석·문 값이 끊기지 않게).
         if (granted) c.vehicleSource.refreshSpeedPermission()
     }
+
+    /** 알림 권한을 물은 결과(첫 실행 안내나 환경설정에서). */
+    fun onNotificationPermissionResult(granted: Boolean) {
+        _notifyAsked.value = true
+        _notifyGranted.value = granted
+    }
+
+    /** 알림 권한이 있는지. 안드로이드 12 이하는 설치 때 주어지므로 늘 true. */
+    private fun checkNotificationPermission(): Boolean =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU || runCatching {
+            getApplication<Application>().checkSelfPermission(PERMISSION_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+        }.getOrDefault(false)
 
     private fun checkSpeedPermission(): Boolean = runCatching {
         getApplication<Application>().checkSelfPermission(PERMISSION_SPEED) == PackageManager.PERMISSION_GRANTED
@@ -505,5 +551,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app), DevPanelActions {
         /** 위치 권한 이름(Pleos FusedLocation). 화면에서 권한을 물을 때 쓴다. */
         const val PERMISSION_LOCATION = PleosSignalSource.PERMISSION_FUSED_LOCATION
         const val PERMISSION_SPEED = "android.car.permission.CAR_SPEED"
+        /** 알림 권한(안드로이드 13 이상, 사용자 허용). 앱이 화면 뒤에 있을 때의 급한 한 줄 알림에 쓴다. */
+        const val PERMISSION_NOTIFICATIONS = "android.permission.POST_NOTIFICATIONS"
     }
 }

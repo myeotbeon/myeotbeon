@@ -21,6 +21,7 @@ import app.myeotbeonideun.signal.SourceStatus
 import app.myeotbeonideun.speech.SpeechResult
 import app.myeotbeonideun.ui.AppViewModel
 import app.myeotbeonideun.ui.MainActivity
+import app.myeotbeonideun.ui.NotifyAsk
 import app.myeotbeonideun.ui.Screen
 import app.myeotbeonideun.ui.SpeedAsk
 import org.junit.Assert.assertEquals
@@ -119,6 +120,22 @@ class VehicleSourceChoiceTest {
         idle()
         assertEquals(SpeedAsk.HIDDEN, vm.shell.value.speedAsk)
         assertEquals(1, fake.speedRefreshes)
+    }
+
+    @Test
+    fun `알림 권한이 없으면 첫 실행 안내에서 권하고 환경설정에도 허용하기를 보이며 허용하면 둘 다 감춘다`() {
+        val vm = AppViewModel(app)
+        idle()
+        assertEquals(NotifyAsk.SUGGEST, vm.shell.value.notifyAsk)
+        assertTrue(vm.settings.value.notificationPermissionNeeded)
+        vm.onNotificationPermissionResult(false)
+        idle()
+        assertEquals("한 번 물었으면 다시 조르지 않는다", NotifyAsk.DECLINED, vm.shell.value.notifyAsk)
+        assertTrue("환경설정에서는 언제든 허용할 수 있다", vm.settings.value.notificationPermissionNeeded)
+        vm.onNotificationPermissionResult(true)
+        idle()
+        assertEquals(NotifyAsk.HIDDEN, vm.shell.value.notifyAsk)
+        assertFalse(vm.settings.value.notificationPermissionNeeded)
     }
 
     @Test

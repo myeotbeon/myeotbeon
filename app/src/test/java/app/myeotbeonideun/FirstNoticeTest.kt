@@ -2,12 +2,14 @@ package app.myeotbeonideun
 
 import android.app.Application
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import app.myeotbeonideun.ui.AppShell
+import app.myeotbeonideun.ui.NotifyAsk
 import app.myeotbeonideun.ui.ShellUi
 import app.myeotbeonideun.ui.SpeedAsk
 import app.myeotbeonideun.ui.theme.MyeotbeonTheme
@@ -30,10 +32,13 @@ class FirstNoticeTest {
     @get:Rule
     val compose = createComposeRule()
 
-    private fun show(shell: ShellUi, onSpeed: () -> Unit = {}) {
+    private fun show(shell: ShellUi, onSpeed: () -> Unit = {}, onNotify: () -> Unit = {}) {
         compose.setContent {
             MyeotbeonTheme(dark = true) {
-                AppShell(shell, onNavigate = {}, onAcceptNotice = {}, onRequestSpeedPermission = onSpeed) { _, _ -> }
+                AppShell(
+                    shell, onNavigate = {}, onAcceptNotice = {}, onRequestSpeedPermission = onSpeed,
+                    onRequestNotificationPermission = onNotify,
+                ) { _, _ -> }
             }
         }
         compose.waitForIdle()
@@ -42,7 +47,7 @@ class FirstNoticeTest {
     @Test
     fun `속도 권한이 없으면 첫 실행 안내에서 허용을 권하고 위치 정보 창이 뜬다고 미리 말한다`() {
         var asked = 0
-        show(ShellUi(noticeAccepted = false, speedAsk = SpeedAsk.SUGGEST)) { asked++ }
+        show(ShellUi(noticeAccepted = false, speedAsk = SpeedAsk.SUGGEST), onSpeed = { asked++ })
         compose.onNodeWithText("속도 신호 허용(권장)").assertExists()
         compose.onNodeWithText("허용 창에는 ‘위치 정보’에 액세스한다고 나와요", substring = true).assertExists()
         compose.onNodeWithText("속도 신호 허용하기").performScrollTo().performClick()
@@ -65,9 +70,34 @@ class FirstNoticeTest {
     }
 
     @Test
+    fun `알림 권한이 없으면 첫 실행 안내에서 알림 허용도 권하고 거절하면 환경설정에서 할 수 있다고만 적는다`() {
+        var asked = 0
+        show(ShellUi(noticeAccepted = false, speedAsk = SpeedAsk.SUGGEST, notifyAsk = NotifyAsk.SUGGEST), onNotify = { asked++ })
+        compose.onNodeWithText("급한 알림 허용(권장)").assertExists()
+        compose.onNodeWithText("앱이 화면 뒤에 있을 때", substring = true).assertExists()
+        compose.onNodeWithText("알림 허용하기").performScrollTo().performClick()
+        assertEquals(1, asked)
+        compose.onNodeWithText("확인했어요").assertIsDisplayed() // 권하는 칸이 둘이어도 넘기지 않고 보인다
+    }
+
+    @Test
+    fun `알림을 거절했거나 이미 허용했으면 다시 조르지 않는다`() {
+        show(ShellUi(noticeAccepted = false, notifyAsk = NotifyAsk.DECLINED))
+        compose.onNodeWithText("알림을 허용하지 않았어요", substring = true).assertExists()
+        compose.onAllNodesWithText("알림 허용하기").assertCountEquals(0)
+    }
+
+    @Test
+    fun `알림 권한이 있으면 권하지 않는다`() {
+        show(ShellUi(noticeAccepted = false, notifyAsk = NotifyAsk.HIDDEN))
+        compose.onAllNodesWithText("급한 알림 허용(권장)").assertCountEquals(0)
+    }
+
+    @Test
     fun `주행 중에는 첫 실행 안내를 보이지 않는다`() {
-        show(ShellUi(noticeAccepted = false, restricted = true, speedAsk = SpeedAsk.SUGGEST))
+        show(ShellUi(noticeAccepted = false, restricted = true, speedAsk = SpeedAsk.SUGGEST, notifyAsk = NotifyAsk.SUGGEST))
         compose.onAllNodesWithText("시작하기 전에").assertCountEquals(0)
         compose.onAllNodesWithText("속도 신호 허용하기").assertCountEquals(0)
+        compose.onAllNodesWithText("알림 허용하기").assertCountEquals(0)
     }
 }

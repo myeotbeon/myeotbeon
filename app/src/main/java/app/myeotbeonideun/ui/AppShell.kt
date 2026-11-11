@@ -60,6 +60,7 @@ private val NAV_ITEMS = listOf(
  * (실차가 주행 중이면 잠근다).
  *
  * @param onRequestSpeedPermission 첫 실행 안내의 '속도 신호 허용하기'(정차 중에만 보인다)
+ * @param onRequestNotificationPermission 첫 실행 안내의 '알림 허용하기'(정차 중에만 보인다)
  * @param content 지금 화면을 그린다. 둘째 인자는 넓은 창인지
  */
 @Composable
@@ -68,6 +69,7 @@ fun AppShell(
     onNavigate: (Screen) -> Unit,
     onAcceptNotice: () -> Unit,
     onRequestSpeedPermission: () -> Unit = {},
+    onRequestNotificationPermission: () -> Unit = {},
     content: @Composable (Screen, Boolean) -> Unit,
 ) {
     val colors = LocalAppColors.current
@@ -75,7 +77,7 @@ fun AppShell(
         BoxWithConstraints(Modifier.fillMaxSize().safeDrawingPadding()) {
             val wide = maxWidth >= 900.dp
             if (!shell.noticeAccepted && !shell.restricted) {
-                FirstNotice(shell.speedAsk, onAcceptNotice, onRequestSpeedPermission)
+                FirstNotice(shell.speedAsk, shell.notifyAsk, onAcceptNotice, onRequestSpeedPermission, onRequestNotificationPermission)
                 return@BoxWithConstraints
             }
             val body: @Composable (Modifier) -> Unit = { m ->
@@ -144,42 +146,79 @@ private fun NavButton(item: NavItem, shell: ShellUi, onNavigate: (Screen) -> Uni
 /**
  * 처음 실행할 때 한 번 보이는 안내. '확인했어요'를 눌러야만 넘어간다. 정차 중에만 보인다.
  * 속도 권한이 없으면 여기서 한 번 허용을 권한다(허용 창이 '위치 정보'로 뜬다는 것을 미리 말해 둔다).
+ * 알림 권한이 없으면(안드로이드 13 이상) 알림 허용도 여기서 권한다 — 동행을 시작할 때는 묻지 않는다(검토 NEW-4).
  */
 @Composable
-private fun FirstNotice(speedAsk: SpeedAsk, onAccept: () -> Unit, onRequestSpeedPermission: () -> Unit) {
-    val colors = LocalAppColors.current
+private fun FirstNotice(
+    speedAsk: SpeedAsk,
+    notifyAsk: NotifyAsk,
+    onAccept: () -> Unit,
+    onRequestSpeedPermission: () -> Unit,
+    onRequestNotificationPermission: () -> Unit,
+) {
+    // '확인했어요'는 늘 보이게 아래에 둔다. 권하는 칸이 둘(속도·알림)이면 안내가 한 화면을 넘으므로 위쪽만 넘겨 본다.
     Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 48.dp, vertical = 32.dp),
-        verticalArrangement = Arrangement.spacedBy(20.dp, Alignment.CenterVertically),
+        Modifier.fillMaxSize().padding(horizontal = 48.dp, vertical = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text(stringResource(R.string.notice_title), style = AppType.hero, color = colors.text)
-        Text(stringResource(R.string.notice_intro), style = AppType.line, color = colors.accent)
-        Panel(Modifier.widthIn(max = 1100.dp)) {
-            SectionTitle(stringResource(R.string.settings_safety))
-            Text(stringResource(R.string.settings_safety_body), style = AppType.body, color = colors.text)
-            Spacer(Modifier.height(4.dp))
-            SectionTitle(stringResource(R.string.settings_privacy))
-            Text(stringResource(R.string.settings_privacy_body), style = AppType.body, color = colors.text)
+        Column(
+            Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            FirstNoticeBody(speedAsk, notifyAsk, onRequestSpeedPermission, onRequestNotificationPermission)
         }
-        if (speedAsk != SpeedAsk.HIDDEN) {
-            Panel(Modifier.widthIn(max = 1100.dp)) {
-                SectionTitle(stringResource(R.string.notice_speed_title))
-                Text(
-                    stringResource(if (speedAsk == SpeedAsk.SUGGEST) R.string.notice_speed_body else R.string.notice_speed_declined),
-                    style = AppType.body, color = colors.text,
+        Spacer(Modifier.height(16.dp))
+        BigButton(stringResource(R.string.notice_accept), onAccept, Modifier.widthIn(min = 420.dp), minHeight = 112.dp)
+    }
+}
+
+@Composable
+private fun FirstNoticeBody(
+    speedAsk: SpeedAsk,
+    notifyAsk: NotifyAsk,
+    onRequestSpeedPermission: () -> Unit,
+    onRequestNotificationPermission: () -> Unit,
+) {
+    val colors = LocalAppColors.current
+    Spacer(Modifier.height(8.dp))
+    Text(stringResource(R.string.notice_title), style = AppType.hero, color = colors.text)
+    Text(stringResource(R.string.notice_intro), style = AppType.line, color = colors.accent)
+    Panel(Modifier.widthIn(max = 1100.dp)) {
+        SectionTitle(stringResource(R.string.settings_safety))
+        Text(stringResource(R.string.settings_safety_body), style = AppType.body, color = colors.text)
+        Spacer(Modifier.height(4.dp))
+        SectionTitle(stringResource(R.string.settings_privacy))
+        Text(stringResource(R.string.settings_privacy_body), style = AppType.body, color = colors.text)
+    }
+    if (speedAsk != SpeedAsk.HIDDEN) {
+        Panel(Modifier.widthIn(max = 1100.dp)) {
+            SectionTitle(stringResource(R.string.notice_speed_title))
+            Text(
+                stringResource(if (speedAsk == SpeedAsk.SUGGEST) R.string.notice_speed_body else R.string.notice_speed_declined),
+                style = AppType.body, color = colors.text,
+            )
+            if (speedAsk == SpeedAsk.SUGGEST) {
+                BigButton(
+                    stringResource(R.string.settings_speed_permission), onRequestSpeedPermission,
+                    primary = false, minHeight = 88.dp, textStyle = AppType.body,
                 )
-                if (speedAsk == SpeedAsk.SUGGEST) {
-                    BigButton(
-                        stringResource(R.string.settings_speed_permission), onRequestSpeedPermission,
-                        primary = false, minHeight = 88.dp, textStyle = AppType.body,
-                    )
-                }
             }
         }
-        BigButton(stringResource(R.string.notice_accept), onAccept, Modifier.widthIn(min = 420.dp), minHeight = 112.dp)
+    }
+    if (notifyAsk != NotifyAsk.HIDDEN) {
+        Panel(Modifier.widthIn(max = 1100.dp)) {
+            SectionTitle(stringResource(R.string.notice_notify_title))
+            Text(
+                stringResource(if (notifyAsk == NotifyAsk.SUGGEST) R.string.notice_notify_body else R.string.notice_notify_declined),
+                style = AppType.body, color = colors.text,
+            )
+            if (notifyAsk == NotifyAsk.SUGGEST) {
+                BigButton(
+                    stringResource(R.string.settings_notify_permission), onRequestNotificationPermission,
+                    primary = false, minHeight = 88.dp, textStyle = AppType.body,
+                )
+            }
+        }
     }
 }

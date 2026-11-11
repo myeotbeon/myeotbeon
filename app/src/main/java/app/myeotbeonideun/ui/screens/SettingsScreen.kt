@@ -51,6 +51,8 @@ data class SettingsUi(
     val vehicleStatus: SourceStatus = SourceStatus.IDLE,
     /** 좌석 값을 지금 어떻게 읽는지("좌석 값: 반대로(운전석 기준 자동)"). 차량용 기기가 아니면 null */
     val seatReadingLine: String? = null,
+    /** 알림 권한이 없어(안드로이드 13 이상) '알림 허용하기'를 보이는지. */
+    val notificationPermissionNeeded: Boolean = false,
 )
 
 /** 환경설정(정차 중에만): 체험 모드, 실험 기능, 개인정보 안내, 안전 안내, 지우기, 개발자 패널. */
@@ -68,6 +70,7 @@ fun SettingsScreen(
     // Compose 규칙: modifier 는 첫째 선택 인자다(그 뒤에 기본값이 있는 콜백을 둔다).
     modifier: Modifier = Modifier,
     onSeatReading: (SeatReading) -> Unit = {},
+    onRequestNotificationPermission: () -> Unit = {},
 ) {
     val colors = LocalAppColors.current
     Column(
@@ -198,6 +201,20 @@ fun SettingsScreen(
                 )
                 // 실기(에뮬레이터)에서 권한 창은 '위치 정보 액세스 허용'으로 뜬다. 놀라지 않게 미리 말해 둔다.
                 Text(stringResource(R.string.settings_speed_permission_dialog), style = AppType.small, color = colors.textSoft)
+            }
+        }
+
+        // 알림 권한(안드로이드 13 이상): 앱이 화면 뒤에 있을 때의 급한 한 줄 알림. 동행을 시작할 때는 묻지 않으므로 여기서 허용한다.
+        if (ui.notificationPermissionNeeded) {
+            Panel {
+                SectionTitle(stringResource(R.string.settings_notify))
+                Text(stringResource(R.string.settings_notify_note), style = AppType.body, color = colors.text)
+                BigButton(
+                    text = stringResource(R.string.settings_notify_permission),
+                    onClick = onRequestNotificationPermission,
+                    primary = false, minHeight = 88.dp, textStyle = AppType.body,
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
         }
 

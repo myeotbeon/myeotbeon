@@ -7,6 +7,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
@@ -16,6 +17,7 @@ import app.myeotbeonideun.engine.model.TripConfig
 import app.myeotbeonideun.service.TripNotifications
 import app.myeotbeonideun.ui.MainActivity
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -169,23 +171,50 @@ class UrgentAlertTest {
     }
 }
 
-/** 알림 권한은 출발 전 설정에서 동행을 시작할 때(정차 중) 한 번 묻는다(안드로이드 13 이상). */
+/**
+ * 알림 권한(안드로이드 13 이상)은 첫 실행 안내(정차 중)와 환경설정에서만 묻는다. 동행을 시작할 때 물으면 시스템 창이 소개말 동안
+ * 동행 화면을 덮고, 답하지 않고 출발하면 주행 중 화면에 작은 대화 상자가 남는다(검토 NEW-4).
+ */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], qualifiers = "w1700dp-h1212dp-land-mdpi")
 class NotificationPermissionTest {
     @get:Rule
     val compose = createAndroidComposeRule<MainActivity>()
 
+    private fun asked(): Boolean =
+        shadowOf(compose.activity).lastRequestedPermission?.requestedPermissions?.contains(POST_NOTIFICATIONS) == true
+
     @Test
-    fun `동행을 시작할 때 알림 권한을 한 번 묻는다`() {
+    fun `첫 실행 안내에서 알림 허용을 권하고 누르면 그때 묻는다`() {
+        compose.onNodeWithText("급한 알림 허용(권장)").assertExists()
+        assertFalse("화면을 연 것만으로는 묻지 않는다", asked())
+        compose.onNodeWithText("알림 허용하기").performScrollTo().performClick()
+        assertTrue(asked())
+    }
+
+    @Test
+    fun `동행을 시작할 때는 알림 권한을 묻지 않는다`() {
         if (compose.onAllNodesWithText("확인했어요").fetchSemanticsNodes().isNotEmpty()) {
             compose.onNodeWithText("확인했어요").performClick()
         }
         compose.onNodeWithText("동행 시작").performClick()
-        val asked = shadowOf(compose.activity).lastRequestedPermission
-        assertNotNull(asked)
-        assertTrue(asked!!.requestedPermissions.contains("android.permission.POST_NOTIFICATIONS"))
         val app = compose.activity.application as App
+        assertTrue(app.container.trip.inProgress)
+        assertNull("권한 창이 동행 화면을 덮지 않는다", shadowOf(compose.activity).lastRequestedPermission)
         app.container.trip.end()
+    }
+
+    @Test
+    fun `환경설정에서 알림 허용하기로 물을 수 있다`() {
+        if (compose.onAllNodesWithText("확인했어요").fetchSemanticsNodes().isNotEmpty()) {
+            compose.onNodeWithText("확인했어요").performClick()
+        }
+        compose.onNodeWithText("설정").performClick()
+        compose.onNodeWithText("알림 허용하기").performScrollTo().performClick()
+        assertTrue(asked())
+    }
+
+    private companion object {
+        const val POST_NOTIFICATIONS = "android.permission.POST_NOTIFICATIONS"
     }
 }
