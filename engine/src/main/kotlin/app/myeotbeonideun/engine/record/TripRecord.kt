@@ -1,7 +1,8 @@
 package app.myeotbeonideun.engine.record
 
 /**
- * 한 번의 이동에서 센 횟수. 기록은 횟수뿐이다(누가 무슨 말을 했는지는 남기지 않는다).
+ * 한 번의 이동에서 센 횟수. 기록에 남는 것은 이 횟수와 시작 시각·걸린 시간([TripRecord])뿐이다
+ * (누가 무슨 말을 했는지는 남기지 않는다).
  *
  * 모두 '실제로 소리 내 읽은 말'만 센다. 엔진이 말하기로 했어도 오디오 포커스를 얻지 못했거나 음성 엔진이 없어
  * 소리 내지 못한 말, 다른 말에 끊긴 말은 [skipped] 로 따로 센다([app.myeotbeonideun.engine.CompanionEngine.onUtteranceResult]).
