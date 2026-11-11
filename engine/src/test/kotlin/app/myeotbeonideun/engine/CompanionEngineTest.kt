@@ -559,6 +559,54 @@ class CompanionEngineTest {
     }
 
     @Test
+    fun `급한 알림이 겹치면 더 급한 것을 보이고 그것이 풀리면 남은 것을 다시 보인다`() {
+        val rig = Rig()
+        rig.startAndDepart()
+        rig.clear()
+        rig.set { copy(seatBeltBuckled = false) }
+        rig.advance(61) // 권유 두 번(0초, 30초) 뒤 60초에 운전자 알림
+        val belt = rig.notices().single { it.situation == "belt_off_d" }
+        assertEquals(belt.text, rig.snapshot().driverNotice)
+        rig.set { copy(seatDoorOpen = true) }
+        val door = rig.notices().last { it.situation == "door_open_d" }
+        assertEquals("문이 더 급하다", door.text, rig.snapshot().driverNotice)
+        rig.set { copy(seatWindowOpenPercent = 50) }
+        assertEquals("덜 급한 창문은 그 줄을 차지하지 않는다", door.text, rig.snapshot().driverNotice)
+        rig.set { copy(seatDoorOpen = false) }
+        assertEquals("문이 닫혀도 안전띠는 아직 풀려 있다", belt.text, rig.snapshot().driverNotice)
+        assertTrue(rig.snapshot().driverNoticeUrgent)
+        rig.set { copy(seatBeltBuckled = true) }
+        assertEquals("안전띠를 매면 남은 창문 알림이 보인다", "window_open_d", rig.notices().last().situation)
+        assertEquals(rig.notices().last().text, rig.snapshot().driverNotice)
+        assertFalse(rig.snapshot().driverNoticeUrgent)
+        rig.advance(16)
+        assertNull(rig.snapshot().driverNotice)
+    }
+
+    @Test
+    fun `문이 계속 열려 있으면 세 번 알린 뒤로는 간격을 늘린다`() {
+        val rig = Rig()
+        rig.startAndDepart()
+        rig.clear()
+        rig.set { copy(seatDoorOpen = true) }
+        rig.advance(30) // 0초, 15초, 30초
+        assertEquals(3, rig.notices().size)
+        rig.advance(59)
+        assertEquals("세 번 뒤로는 15초마다 되풀이하지 않는다", 3, rig.notices().size)
+        rig.advance(1) // 30초 + 60초
+        assertEquals(4, rig.notices().size)
+        rig.advance(60)
+        assertEquals(5, rig.notices().size)
+        assertEquals(5, rig.spoken("door_open_p").size)
+        assertEquals("한 번의 열림은 한 건", 1, rig.snapshot().counts.safetyNotices)
+        rig.set { copy(seatDoorOpen = false) }
+        rig.set { copy(seatDoorOpen = true) } // 닫았다가 새로 열면 처음부터 다시 센다
+        rig.advance(15)
+        assertEquals(7, rig.notices().size)
+        assertEquals(2, rig.snapshot().counts.safetyNotices)
+    }
+
+    @Test
     fun `차가 주지 않는 신호의 기능만 꺼지고 나머지는 돈다`() {
         val rig = Rig(TripConfig(place = "큰딸 집", interval = IntervalMode.FIVE_MIN))
         rig.signals = Signals(gear = Gear.PARK) // 좌석·문·창문·안전띠·브레이크·내비 없음
@@ -683,7 +731,7 @@ class CompanionEngineTest {
     }
 
     @Test
-    fun `조용히 중에 다시 말씀드리기를 누르면 조용히가 풀린다`() {
+    fun `조용히 중에 다시 말씀드리기를 누르면 조용히가 풀리고 그 사실을 운전자 화면에 보인다`() {
         val rig = Rig()
         rig.startAndDepart()
         rig.quiet()
@@ -691,6 +739,15 @@ class CompanionEngineTest {
         rig.repeat()
         assertEquals(1, rig.spoken().size)
         assertNull(rig.snapshot().quietUntilMs)
+        val note = rig.notices().single()
+        assertEquals("quiet_off_d", note.situation)
+        assertFalse(note.urgent)
+        assertEquals(note.text, rig.snapshot().driverNotice)
+        rig.advance(16)
+        assertNull("잠깐 보이고 사라진다", rig.snapshot().driverNotice)
+        rig.clear()
+        rig.repeat()
+        assertTrue("조용히 중이 아니면 알리지 않는다", rig.notices().isEmpty())
     }
 
     // ───────── 물으면 대답하기 ─────────

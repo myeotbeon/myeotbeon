@@ -55,6 +55,9 @@ data class EngineParams(
     val driverAwayRepeatMs: Long = 75_000,
     /** 주행 중 문이 계속 열려 있을 때 운전자에게 다시 알리는 간격. */
     val doorRepeatMs: Long = 15_000,
+    /** 이 횟수만큼 알린 뒤로는 [doorSlowRepeatMs] 간격으로 늘린다(덜 닫힌 문으로 끝없이 울리지 않게). */
+    val doorFastRepeats: Int = 3,
+    val doorSlowRepeatMs: Long = 60_000,
     /** 창문이 이만큼(%) 열리면 안내한다. */
     val windowThresholdPercent: Int = 30,
     /** 이만큼 더 닫혀야 다음 열림을 새 일로 본다. */
@@ -85,7 +88,7 @@ data class EngineSnapshot(
     /** 마지막으로 동승자에게 한 말. */
     val lastLine: String? = null,
     val lastLineAtMs: Long? = null,
-    /** 운전자에게 보이는 알림 한 줄. */
+    /** 운전자에게 보이는 알림 한 줄. 여러 개가 떠 있으면 가장 급한 것(풀리면 남은 것이 다시 보인다). */
     val driverNotice: String? = null,
     val driverNoticeUrgent: Boolean = false,
     /** 동승자 카드 두 줄. */

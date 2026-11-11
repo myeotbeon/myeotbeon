@@ -57,6 +57,7 @@ class CompanionEngine(
 
     // 신호 반응(문·창문·안전띠). 한 번의 일(문 한 번 열림 등)마다 번호를 붙여, 되풀이 안내를 한 건으로 센다.
     private var doorAlertAt: Long? = null
+    private var doorAlertCount = 0
     private var doorEvent = 0L
     private var windowAlerted = false
     private var windowAlertAt = 0L
@@ -83,10 +84,8 @@ class CompanionEngine(
     // 화면에 보일 것
     private var lastLine: String? = null
     private var lastLineAt: Long? = null
-    private var notice: String? = null
-    private var noticeSituation: String? = null
-    private var noticeUrgent = false
-    private var noticeAt = 0L
+    /** 운전자 화면의 알림. 상황마다 따로 두고 가장 급한 것을 보인다. 하나가 풀리면 남은 것이 다시 보인다. */
+    private val notices = LinkedHashMap<String, Notice>()
     private var counts = TripCounts()
 
     private data class Candidate(
@@ -106,6 +105,12 @@ class CompanionEngine(
 
     /** 내보낸 말이 무엇이었는지. 실제로 소리 냈다는 결과가 오면 그때 센다. */
     private data class Utterance(val kind: SpeechKind, val eventKey: Long?)
+
+    /**
+     * 운전자 화면의 알림 한 줄.
+     * @property untilMs 이때 지운다. null 이면 급한 알림은 그 일이 풀릴 때까지, 급하지 않은 알림은 [EngineParams.noticeHoldMs] 동안
+     */
+    private data class Notice(val situation: String, val text: String, val urgent: Boolean, val atMs: Long, val untilMs: Long?)
 
     // ───────────────────────── 바깥에서 부르는 것 ─────────────────────────
 
@@ -136,8 +141,12 @@ class CompanionEngine(
     /** 운전자가 '다시 말씀드리기'를 눌렀다(또는 Gleo 로 시켰다). */
     fun requestRepeat(nowMs: Long): List<EngineAction> {
         if (phase == Phase.ENDED) return emptyList()
-        quietUntil = null // 운전자가 직접 시킨 말이므로 '잠시 조용히'를 푼다
         val out = ArrayList<EngineAction>()
+        if (isQuiet(nowMs)) {
+            // 운전자가 직접 시킨 말이므로 '잠시 조용히'를 푼다. 말없이 풀리지 않게 운전자 화면에 한 줄로 알린다.
+            notify("quiet_off_d", urgent = false, nowMs, out)
+        }
+        quietUntil = null
         val situation = currentFactSituation()
         offer(
             Candidate(
@@ -249,19 +258,22 @@ class CompanionEngine(
         )
     }
 
-    fun snapshot(nowMs: Long): EngineSnapshot = EngineSnapshot(
-        phase = phase,
-        stage = stage,
-        stopReason = stopReason,
-        quietUntilMs = quietUntil?.takeIf { nowMs < it },
-        lastLine = lastLine,
-        lastLineAtMs = lastLineAt,
-        driverNotice = notice,
-        driverNoticeUrgent = noticeUrgent,
-        cardTitle = script.at("card_title", 0) ?: config.place,
-        cardStage = cardStageLine(),
-        counts = counts,
-    )
+    fun snapshot(nowMs: Long): EngineSnapshot {
+        val top = topNotice()
+        return EngineSnapshot(
+            phase = phase,
+            stage = stage,
+            stopReason = stopReason,
+            quietUntilMs = quietUntil?.takeIf { nowMs < it },
+            lastLine = lastLine,
+            lastLineAtMs = lastLineAt,
+            driverNotice = top?.text,
+            driverNoticeUrgent = top?.urgent ?: false,
+            cardTitle = script.at("card_title", 0) ?: config.place,
+            cardStage = cardStageLine(),
+            counts = counts,
+        )
+    }
 
     // ───────────────────────── 판단 ─────────────────────────
 
@@ -275,7 +287,7 @@ class CompanionEngine(
         evaluateStage(now, out)
         flush(now, out)
         evaluateProactive(now, out)
-        expireNotice(now)
+        expireNotices(now)
         return out
     }
 
@@ -313,9 +325,12 @@ class CompanionEngine(
         // 문: 운전자에게 즉시 소리와 화면으로, 동승자에게는 닫아 달라고.
         if (driving && s.seatDoorOpen == true) {
             val last = doorAlertAt
-            if (last == null || now - last >= params.doorRepeatMs) {
+            // 열려 있는 동안 되풀이하되, 몇 번 알린 뒤로는 간격을 늘린다(덜 닫힌 문으로 끝없이 울리지 않게).
+            val gap = if (doorAlertCount < params.doorFastRepeats) params.doorRepeatMs else params.doorSlowRepeatMs
+            if (last == null || now - last >= gap) {
                 if (last == null) doorEvent = ++nextEvent
                 doorAlertAt = now
+                doorAlertCount++
                 notify("door_open_d", urgent = true, now, out)
                 offer(
                     Candidate("door_open_p", Priority.SAFETY, SpeechKind.SAFETY, now, ignoreQuiet = true, eventKey = doorEvent),
@@ -324,7 +339,8 @@ class CompanionEngine(
             }
         } else {
             doorAlertAt = null
-            if (noticeSituation == "door_open_d") clearNotice()
+            doorAlertCount = 0
+            clearNotice("door_open_d")
         }
 
         // 창문: 동승자에게 손은 안에 두라고, 운전자 화면에 한 줄.
@@ -332,7 +348,7 @@ class CompanionEngine(
         if (pct != null) {
             if (windowAlerted && pct < params.windowThresholdPercent - params.windowHysteresisPercent) {
                 windowAlerted = false
-                if (noticeSituation == "window_open_d") clearNotice()
+                clearNotice("window_open_d")
             }
             if (driving && pct >= params.windowThresholdPercent &&
                 (!windowAlerted || now - windowAlertAt >= params.windowRepeatMs)
@@ -364,7 +380,7 @@ class CompanionEngine(
         } else {
             beltSince = null
             beltStep = 0
-            if (noticeSituation == "belt_off_d") clearNotice()
+            clearNotice("belt_off_d")
         }
     }
 
@@ -644,25 +660,31 @@ class CompanionEngine(
         return if (rest.startsWith(",")) rest.substring(1).trimStart() else line
     }
 
-    private fun notify(situation: String, urgent: Boolean, now: Long, out: MutableList<EngineAction>) {
+    /**
+     * 운전자 화면에 알림을 올린다. 상황마다 따로 보관하고 화면에는 가장 급한 것 하나를 보인다([topNotice]).
+     * @param holdMs 이만큼 지나면 지운다(이미 지난 일을 알리는 급한 알림). null 이면 [Notice.untilMs] 설명대로
+     */
+    private fun notify(situation: String, urgent: Boolean, now: Long, out: MutableList<EngineAction>, holdMs: Long? = null) {
         val text = script.next(situation) ?: return
         out += DriverNotice(text, situation, urgent)
-        // 급한 알림(주행 중 문 열림 등)이 떠 있는 동안에는 덜 급한 알림이 그 한 줄을 차지하지 않는다.
-        if (notice != null && noticeUrgent && !urgent) return
-        notice = text
-        noticeSituation = situation
-        noticeUrgent = urgent
-        noticeAt = now
+        notices[situation] = Notice(situation, text, urgent, now, holdMs?.let { now + it })
     }
 
-    private fun clearNotice() {
-        notice = null
-        noticeSituation = null
-        noticeUrgent = false
+    private fun clearNotice(situation: String) {
+        notices.remove(situation)
     }
 
-    private fun expireNotice(now: Long) {
-        if (notice != null && !noticeUrgent && now - noticeAt >= params.noticeHoldMs) clearNotice()
+    /** 화면에 보일 알림: 급한 것 > 급한 정도(문 > 안전띠 > 창문) > 나중 것. */
+    private fun topNotice(): Notice? =
+        notices.values.maxWithOrNull(
+            compareBy<Notice>({ it.urgent }, { NOTICE_RANK[it.situation] ?: 0 }, { it.atMs }),
+        )
+
+    private fun expireNotices(now: Long) {
+        notices.values.removeAll { n ->
+            val until = n.untilMs
+            if (until != null) now >= until else !n.urgent && now - n.atMs >= params.noticeHoldMs
+        }
     }
 
     companion object {
@@ -673,6 +695,14 @@ class CompanionEngine(
         const val ARRIVE_REMAIN_METERS = 150
         /** 남은 시간이 이보다 많고 5분 이하일 때만 "5분쯤 남았어요"를 쓴다. */
         const val FIVE_MIN_LINE_MIN_SEC = 3 * 60
+        /** 운전자 알림의 급한 정도. 큰 것이 화면 한 줄을 먼저 차지한다. */
+        private val NOTICE_RANK = mapOf(
+            "door_open_d" to 5,
+            "belt_off_d" to 2,
+            "window_open_d" to 1,
+            "quiet_off_d" to 0,
+        )
+
         /** 가는 곳 이름이 이것이면 집으로 가는 길로 본다(공백은 빼고 견준다). */
         val HOME_NAMES = setOf("집", "우리집", "댁", "자택")
 

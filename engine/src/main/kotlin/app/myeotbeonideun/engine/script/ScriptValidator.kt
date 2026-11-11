@@ -90,6 +90,8 @@ object ScriptValidator {
         "door_open_d" to Audience.DRIVER,
         "window_open_d" to Audience.DRIVER,
         "belt_off_d" to Audience.DRIVER,
+        // '다시 말씀드리기'가 '잠시 조용히'를 풀었을 때 운전자 화면에 보이는 한 줄
+        "quiet_off_d" to Audience.DRIVER,
         "redirect_clinic" to Audience.PASSENGER,
         "redirect_meal" to Audience.PASSENGER,
         "redirect_family" to Audience.PASSENGER,

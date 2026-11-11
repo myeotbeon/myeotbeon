@@ -203,6 +203,13 @@
         "동승자 안전띠가 풀렸어요."
       ]
     },
+    "quiet_off_d": {
+      "to": "driver",
+      "lines": [
+        "잠시 조용히를 풀었어요.",
+        "잠시 조용히가 풀렸어요."
+      ]
+    },
     "redirect_clinic": {
       "to": "passenger",
       "lines": [
