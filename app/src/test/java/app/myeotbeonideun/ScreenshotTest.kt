@@ -25,9 +25,11 @@ import app.myeotbeonideun.engine.script.ScriptBook
 import app.myeotbeonideun.signal.Capabilities
 import app.myeotbeonideun.signal.DemoSignalSource
 import app.myeotbeonideun.signal.SourceKind
+import app.myeotbeonideun.signal.SourceStatus
 import app.myeotbeonideun.ui.AppShell
 import app.myeotbeonideun.ui.Screen
 import app.myeotbeonideun.ui.ShellUi
+import app.myeotbeonideun.ui.SpeedAsk
 import app.myeotbeonideun.ui.screens.CompanionScreen
 import app.myeotbeonideun.ui.screens.CompanionUi
 import app.myeotbeonideun.ui.screens.DevPanelActions
@@ -124,6 +126,8 @@ class ScreenshotTest {
                 noticeUrgent = s.driverNoticeUrgent,
                 quietMinutesLeft = s.quietUntilMs?.let { ((it - now + 59_999) / 60_000).toInt() },
                 canEnd = !restricted,
+                // 앱(AppViewModel)과 같다: 정차 중이고 엔진이 운전자의 도착 알림을 받을 수 있을 때 '도착했어요'
+                canConfirmArrival = !restricted && s.canConfirmArrival,
                 restricted = restricted,
             )
         }
@@ -233,7 +237,8 @@ class ScreenshotTest {
     fun `13 오늘의 기록`() = shot("13_records", ShellUi(Screen.RECORDS)) {
         RecordsScreen(
             RecordsUi(
-                today = DaySummary(trips = 2, durationSec = 71 * 60, counts = TripCounts(11, 6, 2, 9, 1)),
+                // 큰 숫자 = 차가 대신 말한 횟수(11+6+2+9). 안전 안내와 끝까지 소리 내지 못한 말은 따로 보인다
+                today = DaySummary(trips = 2, durationSec = 71 * 60, counts = TripCounts(11, 6, 2, 9, 1, skipped = 2)),
                 trend = listOf(9, 14, 11, 17, 12, 15, 13, 15),
             ),
         )
@@ -244,16 +249,23 @@ class ScreenshotTest {
     @Test
     fun `14 환경설정`() = shot("14_settings", ShellUi(Screen.SETTINGS)) {
         SettingsScreen(
+            // 2026-11-11 Pleos Connect 에뮬레이터에서 처음 본 상태: 속도만 '없음'(권한 허용 전), 좌석 값은 반대로 옴
             SettingsUi(
                 settings = Settings(),
                 isAutomotive = true,
                 sourceKind = SourceKind.VEHICLE,
                 capabilities = Capabilities(
-                    seatOccupancy = true, door = true, window = true, brake = true, gear = true,
-                    uxRestrictions = true, navigation = true,
+                    seatOccupancy = true, seatBelt = true, door = true, window = true, brake = true, gear = true,
+                    uxRestrictions = true, navigation = true, location = true,
                 ),
                 speechEngine = "Pleos TextToSpeech (ON_DEVICE)",
                 versionName = "1.0.0",
+                vehicleStatus = SourceStatus.READY,
+                seatReadingLine = context.getString(
+                    R.string.seat_reading_line,
+                    context.getString(R.string.seat_polarity_inverted),
+                    context.getString(R.string.seat_basis_driver),
+                ),
             ),
             {}, {}, {}, {}, {}, {}, {},
         )
@@ -288,7 +300,20 @@ class ScreenshotTest {
     fun `16 주행 중 잠금 안내`() = shot("16_locked_while_driving", ShellUi(Screen.SETUP, restricted = true, tripActive = true)) {}
 
     @Test
-    fun `17 처음 실행 안내`() = shot("17_first_notice", ShellUi(Screen.SETUP, noticeAccepted = false)) {}
+    fun `17 처음 실행 안내`() =
+        // 차량용 기기에서 속도 권한이 없을 때: 속도 신호 허용을 한 번 권한다
+        shot("17_first_notice", ShellUi(Screen.SETUP, noticeAccepted = false, speedAsk = SpeedAsk.SUGGEST)) {}
+
+    @Test
+    fun `18 동행 중 - 내비 없는 길에서 정차`() = shot("18_companion_parked_unsure", drivingShell.copy(restricted = false)) {
+        Companion(
+            // 내비 안내 없이 간 길(매일 가는 병원 등): P단으로 서면 도착인지 모르므로 도착을 부정하지 않는 말을 하고,
+            // 정차 중에만 '도착했어요'(운전자가 도착을 알림)와 '동행 끝내기'가 보인다
+            Drive(context, config).nav { NavState() }.set { copy(gear = Gear.DRIVE) }.wait(150)
+                .set { copy(gear = Gear.PARK) }.wait(8)
+                .ui("가는 중", restricted = false),
+        )
+    }
 
     private object NoActions : DevPanelActions {
         override fun change(change: (app.myeotbeonideun.engine.model.VehicleState) -> app.myeotbeonideun.engine.model.VehicleState) {}

@@ -87,7 +87,7 @@
     <string name="interval_off">끔</string>
     <string name="setup_remember">도착 지점 기억하기</string>
     <!-- 도착 지점은 도착했을 때(운전자가 '도착했어요'를 누르거나 차가 도착을 본 때) 저장되고, 다음 동행부터 근접 알림에 쓴다 -->
-    <string name="setup_remember_note">이 길에서 도착하면(‘도착했어요’를 누르거나 차가 도착을 알아챌 때) 그 위치를 기억해, 다음부터 내비 없이도 300m 앞에서 곧 도착을 알려요. 위치는 이 기기에만 저장돼요.</string>
+    <string name="setup_remember_note">도착하면(‘도착했어요’를 누르거나 차가 알아챌 때) 그 위치를 기억해, 다음부터 내비 없이도 300m 앞에서 곧 도착을 알려요. 위치는 이 기기에만 저장돼요.</string>
     <string name="setup_preview">이렇게 말해요: “%1$s”</string>
     <string name="setup_start">동행 시작</string>
     <string name="setup_start_need">호칭, 가는 곳, 운전하는 사람을 정해 주세요</string>
