@@ -335,7 +335,7 @@ class CompanionEngine(
             cardTitle = script.at("card_title", 0) ?: config.place,
             cardStage = cardStageLine(),
             counts = counts,
-            canConfirmArrival = phase == Phase.DRIVING && signals.motion != Motion.IN_DRIVE,
+            canConfirmArrival = phase == Phase.DRIVING && signals.motion == Motion.PARKED,
         )
     }
 

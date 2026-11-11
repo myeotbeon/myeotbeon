@@ -127,7 +127,7 @@ data class EngineSnapshot(
     val cardStage: String = "",
     val counts: TripCounts = TripCounts(),
     /**
-     * 운전자가 '도착했어요'로 도착을 알릴 수 있는 때(출발한 뒤 아직 도착 전이고 주행 단이 아닐 때).
+     * 운전자가 '도착했어요'로 도착을 알릴 수 있는 때(출발한 뒤 아직 도착 전이고 P단일 때. 변속단·주행 규제를 모르면 false).
      * 내비 없이 가는 길은 차가 도착을 스스로 알 수 없어 이것이 유일한 길이다([CompanionEngine.driverConfirmedArrival]).
      */
     val canConfirmArrival: Boolean = false,

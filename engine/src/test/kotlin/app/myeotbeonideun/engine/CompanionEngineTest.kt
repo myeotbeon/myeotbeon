@@ -1032,6 +1032,47 @@ class CompanionEngineTest {
         assertTrue(rig.spoken("stage_onway").size >= 3)
     }
 
+    @Test
+    fun `주행 중에 신호가 모두 끊겨 null 이 되어도 멈춤·도착·문 안내를 지어내지 않고 돌아오면 이어 간다`() {
+        val rig = Rig(TripConfig(place = "큰딸 집", interval = IntervalMode.FIVE_MIN))
+        rig.startAndDepart()
+        val before = rig.signals
+        rig.clear()
+        rig.signals = Signals() // 변속단·주행 규제·속도·브레이크·좌석·문·창문·안전띠·내비가 모두 끊김
+        rig.set { this }
+        rig.advance(6 * 60)
+        assertEquals("출발한 여정은 그대로 이어 간다", Phase.DRIVING, rig.snapshot().phase)
+        assertTrue(rig.spoken().none { it.kind == SpeechKind.STOP || it.kind == SpeechKind.SAFETY })
+        assertTrue(rig.notices().isEmpty())
+        assertTrue(rig.arrivals().isEmpty())
+        assertEquals(StopReason.NONE, rig.snapshot().stopReason)
+        assertFalse("P단인지 모르면 '도착했어요'를 받지 않는다", rig.snapshot().canConfirmArrival)
+        assertTrue("시간으로 하는 먼저 말하기는 이어 간다", rig.spoken().any { it.kind == SpeechKind.PROACTIVE })
+        assertTrue(rig.spoken().all { it.text.startsWith("어머니,") })
+
+        // 신호가 돌아오면 출발 안내를 다시 하지 않고, 구간도 뒤로 가지 않는다
+        val stage = rig.snapshot().stage
+        rig.signals = before
+        rig.set { this }
+        rig.advance(30)
+        assertTrue(rig.spoken("depart").isEmpty())
+        assertEquals(Phase.DRIVING, rig.snapshot().phase)
+        assertTrue(rig.snapshot().stage.ordinal >= stage.ordinal)
+
+        // 신호가 몇 초 끊겼다 돌아온 사이에 브레이크를 밟고 있었어도 멈춤 시간은 처음부터 다시 잰다
+        rig.set { copy(brakePressed = true) }
+        rig.advance(10)
+        rig.signals = Signals()
+        rig.set { this }
+        rig.advance(5)
+        rig.signals = before.copy(brakePressed = true)
+        rig.set { this }
+        rig.advance(10)
+        assertTrue(rig.spoken("stop_signal").isEmpty())
+        rig.advance(10)
+        assertEquals(1, rig.spoken("stop_signal").size)
+    }
+
     // ───────── 우선순위와 잠시 조용히 ─────────
 
     @Test
