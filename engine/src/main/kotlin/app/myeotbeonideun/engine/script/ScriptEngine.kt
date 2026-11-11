@@ -48,8 +48,13 @@ class ScriptEngine(private val book: ScriptBook, private val slots: SlotValues) 
     fun count(key: String): Int = book.situation(key)?.lines?.size ?: 0
 
     companion object {
-        /** `{슬롯}` 또는 `{슬롯:조사}` */
-        val SLOT_PATTERN = Regex("""\{([^{}:]+)(?::([^{}]*))?}""")
+        /**
+         * `{슬롯}` 또는 `{슬롯:조사}`.
+         * 닫는 중괄호도 반드시 `\}` 로 이스케이프한다. JVM 정규식은 맨 끝의 `}` 를 글자로 받아 주지만
+         * 안드로이드(ICU) 정규식은 컴파일 오류(U_REGEX_RULE_SYNTAX)를 내고, 이 클래스 초기화가 실패해
+         * 앱이 바로 종료된다(2026-11-11 Pleos Connect 에뮬레이터에서 확인). [RegexPortabilityTest] 가 지킨다.
+         */
+        val SLOT_PATTERN = Regex("""\{([^{}:]+)(?::([^{}]*))?\}""")
 
         /** 빈칸을 채우고 조사를 고른다. 모르는 슬롯은 그대로 둔다(검사기가 잡는다). */
         fun render(template: String, slots: SlotValues): String =
