@@ -380,7 +380,8 @@ class CompanionEngine(
         }
 
         // 속도 신호가 살아 있다고 확인되면(한 번이라도 움직임이 보이면) 속도로, 아니면 브레이크로 정지를 본다.
-        // 에뮬레이터는 속도를 바꿀 수 없어 0 에 머무르므로, 속도만 믿으면 계속 서 있는 것으로 잘못 본다.
+        // 속도 값은 움직이기 전까지 0 에 머무를 수 있어(에뮬레이터는 가상 콘솔에서 바꾸지 않으면 0), 속도만 믿으면
+        // 계속 서 있는 것으로 잘못 본다.
         val speed = s.speedKph
         if (speed != null && speed >= MOVING_KPH) speedSeenMoving = true
         val stationary = if (speedSeenMoving && speed != null) speed < STATIONARY_KPH else s.brakePressed == true

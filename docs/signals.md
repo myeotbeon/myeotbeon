@@ -49,7 +49,7 @@ Pleos Vehicle SDK 2.3.2 에는 속도·변속단 API 가 없습니다.
 | 콜백(`NaviHelperEventListener`) | 쓰는 값 | 기능 |
 |---|---|---|
 | `onRouteStarted(RouteStartInfo)` | `name`, `duration` | 목적지 이름을 '가는 곳'의 기본값으로, 전체 예상 시간을 구간 계산에 |
-| `onDestinationInfo(DestinationInfo)` | `name`, `remainTime`(초), `remainDistance`(m) | 남은 시간으로 구간(가는 중/절반/거의 다 옴/곧 도착) 결정 |
+| `onDestinationInfo(DestinationInfo)` | `name`, `remainTime`(초 — 2026-11-11 에뮬레이터에서 확인: 9분 경로 = 540), `remainDistance`(m) | 남은 시간으로 구간(가는 중/절반/거의 다 옴/곧 도착) 결정. 0 은 남은 거리도 150m 안일 때만 엔진이 받는다 |
 | `onDrivingInfo(DrivingInfo)` | `destination.duration` | 남은 시간 갱신 |
 | `onRouteStateInfo(RouteStateInfo)` | `isRouting`, `trafficStatus.summary.totalCongestionTime` | 경로에 1분 넘는 정체가 있으면, 정지했을 때 "길이 막혀요"로 말함 |
 | `onDestinationArrived(DestinationArrivedInfo)` | — | 도착 안내 |
