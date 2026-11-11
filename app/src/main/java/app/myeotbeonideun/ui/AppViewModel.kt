@@ -20,6 +20,7 @@ import app.myeotbeonideun.service.TripUi
 import app.myeotbeonideun.signal.DemoSignalSource
 import app.myeotbeonideun.signal.PleosSignalSource
 import app.myeotbeonideun.signal.SourceKind
+import app.myeotbeonideun.signal.SourceStatus
 import app.myeotbeonideun.ui.screens.CompanionUi
 import app.myeotbeonideun.ui.screens.DevPanelActions
 import app.myeotbeonideun.ui.screens.DevPanelUi
@@ -50,14 +51,28 @@ enum class Screen(val parkedOnly: Boolean) {
     DEV(true),
 }
 
-/** 화면 틀(메뉴, 알림표)이 그리는 데 필요한 것. */
+/**
+ * 화면 틀(메뉴, 알림표)이 그리는 데 필요한 것.
+ *
+ * @property restricted 주행 중 화면 잠금(지금 신호 출처의 규제 OR 실차의 규제)
+ * @property vehicleRestricted 실차가 주행 규제 중인지(체험 모드여도 실제 차의 값)
+ */
 data class ShellUi(
     val screen: Screen = Screen.SETUP,
     val restricted: Boolean = false,
     val tripActive: Boolean = false,
     val demo: Boolean = false,
     val noticeAccepted: Boolean = true,
-)
+    val vehicleRestricted: Boolean = false,
+) {
+    /**
+     * 지금 화면 대신 잠금 안내를 보이는지. 정차 전용 화면은 주행 중에 잠근다.
+     * 체험 모드의 개발자 패널은 모의 신호로 '주행'을 흉내 내는 도구라 모의 주행만으로는 잠그지 않지만,
+     * 실차가 주행 중이면 잠근다.
+     */
+    val locked: Boolean
+        get() = screen.parkedOnly && (vehicleRestricted || (restricted && !(screen == Screen.DEV && demo)))
+}
 
 /**
  * 앱의 상태를 화면이 그리기 좋은 모양(…Ui)으로 바꿔 준다. 화면(Composable)은 상태를 갖지 않는다.
@@ -95,8 +110,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app), DevPanelActions {
     // ───────────────────────── 화면 틀 ─────────────────────────
 
     val shell: StateFlow<ShellUi> =
-        combine(_screen, c.drivingRestricted, c.trip.ui, sourceKind, c.store.settings) { screen, restricted, trip, kind, settings ->
-            ShellUi(screen, restricted, trip != null, kind == SourceKind.DEMO, settings.noticeAccepted)
+        combine(
+            _screen, c.drivingRestricted, c.vehicleRestricted, c.trip.ui,
+            combine(sourceKind, c.store.settings) { kind, settings -> kind to settings },
+        ) { screen, restricted, vehicleRestricted, trip, (kind, settings) ->
+            ShellUi(
+                screen = screen,
+                restricted = restricted,
+                tripActive = trip != null,
+                demo = kind == SourceKind.DEMO,
+                noticeAccepted = settings.noticeAccepted,
+                vehicleRestricted = vehicleRestricted,
+            )
         }.stateIn(viewModelScope, SharingStarted.Eagerly, ShellUi(_screen.value))
 
     fun navigate(screen: Screen) {
@@ -163,9 +188,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app), DevPanelActions {
     // ───────────────────────── 동행 중 ─────────────────────────
 
     val companion: StateFlow<CompanionUi> =
-        combine(c.trip.ui, c.drivingRestricted, c.speech.lastSkipped, c.speech.engineMissing) { trip, restricted, skipped, noEngine ->
+        combine(
+            c.trip.ui, c.drivingRestricted, c.speech.lastSkipped, c.speech.engineMissing, c.vehicleSource.status,
+        ) { trip, restricted, skipped, noEngine, vehicleStatus ->
             if (trip == null) CompanionUi(active = false, restricted = restricted)
-            else companionUi(trip, restricted, skipped != null, noEngine)
+            else {
+                // 차량 신호로 도는데 신호를 하나도 얻지 못했다(체험 모드로 넘어가지 않는다). 운전자에게 한 줄로 알린다.
+                val noSignal = trip.sourceKind == SourceKind.VEHICLE && vehicleStatus == SourceStatus.UNAVAILABLE
+                companionUi(trip, restricted, skipped != null, noEngine, noSignal)
+            }
         }.stateIn(viewModelScope, SharingStarted.Eagerly, CompanionUi())
 
     /** 동승자 카드의 두 줄. 동행 중이 아니면 null */
@@ -177,7 +208,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app), DevPanelActions {
     fun toggleQuiet() { c.trip.toggleQuiet() }
     fun endTrip() = c.trip.end()
 
-    private fun companionUi(trip: TripUi, restricted: Boolean, speechSkipped: Boolean, noEngine: Boolean): CompanionUi {
+    private fun companionUi(
+        trip: TripUi,
+        restricted: Boolean,
+        speechSkipped: Boolean,
+        noEngine: Boolean,
+        noSignal: Boolean,
+    ): CompanionUi {
         val s = trip.snapshot
         val stage = when {
             s.phase == Phase.READY -> text(R.string.stage_ready)
@@ -199,11 +236,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app), DevPanelActions {
             stage = stage,
             lastLine = s.lastLine,
             // 소리를 내지 못했으면(음성 엔진 없음, 통화 중 등) 그 사실을 운전자에게 한 줄로 알린다.
-            notice = s.driverNotice ?: when {
-                noEngine -> text(R.string.companion_no_engine)
-                speechSkipped -> text(R.string.companion_speech_skipped)
-                else -> null
-            },
+            notice = s.driverNotice ?: statusNoticeRes(noEngine, noSignal, speechSkipped)?.let { text(it) },
             noticeUrgent = s.driverNotice != null && s.driverNoticeUrgent,
             quietMinutesLeft = s.quietUntilMs?.let { ceil((it - trip.nowMs) / 60_000.0).toInt().coerceAtLeast(1) },
             canEnd = !restricted,
@@ -229,8 +262,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app), DevPanelActions {
     val settings: StateFlow<SettingsUi> =
         combine(
             c.store.settings, sourceKind, capabilities, c.speech.engineName,
-            combine(c.listener.state, _speedGranted) { listen, speed -> listen to speed },
-        ) { settings, kind, cap, engine, (listen, speed) ->
+            combine(c.listener.state, _speedGranted, c.vehicleSource.status) { listen, speed, status -> Triple(listen, speed, status) },
+        ) { settings, kind, cap, engine, (listen, speed, vehicleStatus) ->
             SettingsUi(
                 settings = settings,
                 isAutomotive = c.isAutomotive,
@@ -240,6 +273,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app), DevPanelActions {
                 listenState = listen,
                 speedPermissionGranted = speed,
                 versionName = BuildConfig.VERSION_NAME,
+                vehicleStatus = vehicleStatus,
             )
         }.stateIn(viewModelScope, SharingStarted.Eagerly, SettingsUi())
 
@@ -303,6 +337,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app), DevPanelActions {
 
     companion object {
         private const val DAY_MS = 24 * 60 * 60 * 1000L
+
+        /**
+         * 엔진의 운전자 알림이 없을 때, 그 자리에 보일 앱 상태 한 줄(문자열 id). 없으면 null.
+         * 음성 엔진 없음 > 차량 신호 없음 > 소리 내지 못함 순.
+         */
+        internal fun statusNoticeRes(noEngine: Boolean, noSignal: Boolean, speechSkipped: Boolean): Int? = when {
+            noEngine -> R.string.companion_no_engine
+            noSignal -> R.string.companion_no_signal
+            speechSkipped -> R.string.companion_speech_skipped
+            else -> null
+        }
 
         /** 위치 권한 이름(Pleos FusedLocation). 화면에서 권한을 물을 때 쓴다. */
         const val PERMISSION_LOCATION = PleosSignalSource.PERMISSION_FUSED_LOCATION

@@ -28,6 +28,7 @@ import app.myeotbeonideun.R
 import app.myeotbeonideun.data.Settings
 import app.myeotbeonideun.signal.Capabilities
 import app.myeotbeonideun.signal.SourceKind
+import app.myeotbeonideun.signal.SourceStatus
 import app.myeotbeonideun.speech.ListenState
 import app.myeotbeonideun.ui.BigButton
 import app.myeotbeonideun.ui.ChoiceChip
@@ -45,6 +46,8 @@ data class SettingsUi(
     val listenState: ListenState = ListenState.OFF,
     val speedPermissionGranted: Boolean = false,
     val versionName: String = "",
+    /** 실차 신호의 연결 상태(차량 신호로 돌 때 '차량 신호 없음'을 보인다). */
+    val vehicleStatus: SourceStatus = SourceStatus.IDLE,
 )
 
 /** 환경설정(정차 중에만): 체험 모드, 실험 기능, 개인정보 안내, 안전 안내, 지우기, 개발자 패널. */
@@ -126,7 +129,15 @@ fun SettingsScreen(
         Panel {
             SectionTitle(stringResource(R.string.settings_signals))
             Text(
-                stringResource(if (ui.sourceKind == SourceKind.DEMO) R.string.settings_source_demo else R.string.settings_source_vehicle),
+                stringResource(
+                    when {
+                        ui.sourceKind == SourceKind.DEMO -> R.string.settings_source_demo
+                        // 차량용 기기에서는 신호를 못 얻어도 체험 모드로 넘어가지 않는다. 그 사실을 그대로 알린다.
+                        ui.vehicleStatus == SourceStatus.UNAVAILABLE -> R.string.settings_source_vehicle_none
+                        ui.vehicleStatus == SourceStatus.CONNECTING -> R.string.settings_source_vehicle_connecting
+                        else -> R.string.settings_source_vehicle
+                    },
+                ),
                 style = AppType.body, color = colors.text,
             )
             val cap = ui.capabilities

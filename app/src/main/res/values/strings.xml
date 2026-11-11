@@ -27,6 +27,7 @@
     <string name="companion_go_setup">출발 전 설정으로</string>
     <string name="companion_no_engine">음성 엔진이 없어 화면으로만 알려요</string>
     <string name="companion_speech_skipped">통화·안내 중이라 화면으로만 알렸어요</string>
+    <string name="companion_no_signal">차량 신호가 없어 먼저 말하지 않아요</string>
     <string name="stage_ready">출발 전</string>
     <string name="stage_just_departed">방금 출발</string>
     <string name="stage_on_way">가는 중</string>
@@ -112,6 +113,8 @@
     <string name="settings_signals">차량 신호</string>
     <string name="settings_source_demo">지금은 모의 신호(체험 모드)로 실행 중이에요.</string>
     <string name="settings_source_vehicle">지금은 차량 신호로 실행 중이에요.</string>
+    <string name="settings_source_vehicle_connecting">차량 신호에 연결하는 중이에요.</string>
+    <string name="settings_source_vehicle_none">차량 신호를 받지 못했어요. 신호가 없으면 차가 먼저 말하지 않고, ‘다시 말씀드리기’를 누르면 어디 가는지 말해요.</string>
     <string name="cap_on">%1$s 사용</string>
     <string name="cap_off">%1$s 없음</string>
     <string name="cap_seat">좌석 점유</string>

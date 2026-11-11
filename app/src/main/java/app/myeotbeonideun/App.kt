@@ -6,9 +6,10 @@ import app.myeotbeonideun.data.AppStore
 import app.myeotbeonideun.engine.script.ScriptBook
 import app.myeotbeonideun.service.TripController
 import app.myeotbeonideun.signal.DemoSignalSource
+import app.myeotbeonideun.signal.DrivingLock
 import app.myeotbeonideun.signal.PleosSignalSource
 import app.myeotbeonideun.signal.SignalSource
-import app.myeotbeonideun.signal.SourceStatus
+import app.myeotbeonideun.signal.VehicleSignalSource
 import app.myeotbeonideun.speech.PassengerListener
 import app.myeotbeonideun.speech.PleosPassengerListener
 import app.myeotbeonideun.speech.SpeechController
@@ -22,29 +23,35 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 
-class App : Application() {
+open class App : Application() {
     lateinit var container: AppContainer
         private set
 
     override fun onCreate() {
         super.onCreate()
-        container = AppContainer(this)
+        container = createContainer()
     }
+
+    /** 앱 전체가 함께 쓰는 것들을 만든다. 시험은 이것을 바꿔 차량 신호를 가짜로 끼운다. */
+    protected open fun createContainer(): AppContainer = AppContainer(this)
 }
 
 /**
  * 앱 전체가 함께 쓰는 것들. 의존성 주입 라이브러리 없이 손으로 묶었다.
  * 모든 흐름은 메인 스레드에서 돈다(엔진은 한 스레드에서만 부른다).
+ *
+ * @param isAutomotive 차량용 기기(AAOS)인지. 아니면 차량 서비스에 붙으려 하지 않고 체험 모드로만 돈다.
+ * @param vehicleSource 실차 신호(시험에서는 가짜)
  */
-class AppContainer(private val app: Application) {
+class AppContainer(
+    private val app: Application,
+    val isAutomotive: Boolean = app.packageManager.hasSystemFeature(PackageManager.FEATURE_AUTOMOTIVE),
+    val vehicleSource: VehicleSignalSource = PleosSignalSource(app),
+) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-
-    /** 차량용 기기(AAOS)인지. 아니면 차량 서비스에 붙으려 하지 않고 체험 모드로만 돈다. */
-    val isAutomotive: Boolean = app.packageManager.hasSystemFeature(PackageManager.FEATURE_AUTOMOTIVE)
 
     val store = AppStore(app)
     val demoSource = DemoSignalSource(scope)
-    val vehicleSource = PleosSignalSource(app)
     val speech = SpeechController(app, scope)
     val listener: PassengerListener = PleosPassengerListener(app)
 
@@ -55,20 +62,35 @@ class AppContainer(private val app: Application) {
 
     /**
      * 지금 쓰는 신호 출처.
-     * - 환경설정에서 체험 모드를 켰으면 모의 신호.
-     * - 아니면 차량 신호. 다만 차량 신호를 하나도 얻지 못하면(Pleos 서비스가 없는 기기) 체험 모드로 넘어간다.
+     * - 차량용 기기가 아니면 체험 모드(모의 신호).
+     * - 차량용 기기에서는 환경설정에서 체험 모드를 켰을 때만 모의 신호다. 차량 신호를 하나도 얻지 못해도 체험 모드로
+     *   넘어가지 않는다(모의 P단 때문에 실제 주행 중 화면 잠금이 풀리지 않게). 그때는 '차량 신호 없음'으로 돌며
+     *   다시 연결해 본다.
      */
     val source: StateFlow<SignalSource> =
-        combine(store.settings, vehicleSource.status) { settings, status ->
-            if (!isAutomotive || settings.demoMode || status == SourceStatus.UNAVAILABLE) demoSource else vehicleSource
-        }.stateIn(scope, SharingStarted.Eagerly, if (isAutomotive) vehicleSource else demoSource)
+        store.settings.map { settings -> pick(settings.demoMode) }
+            .stateIn(scope, SharingStarted.Eagerly, pick(store.settings.value.demoMode))
 
-    /** 주행 규제 중인지. 규제 중에는 설정·기록 화면을 잠근다. */
+    private fun pick(demoMode: Boolean): SignalSource =
+        if (!isAutomotive || demoMode) demoSource else vehicleSource
+
+    /** 실차가 주행 규제 중인지(체험 모드여도 실제 차의 값). 차량용 기기가 아니면 늘 false. */
+    val vehicleRestricted: StateFlow<Boolean> =
+        vehicleSource.state.map { isAutomotive && DrivingLock.restricted(it) }
+            .stateIn(scope, SharingStarted.Eagerly, false)
+
+    /**
+     * 주행 중 화면 잠금. 규제 중에는 설정·기록 화면을 잠근다.
+     * 지금 쓰는 신호 출처의 규제와 실차의 규제(CarUxRestrictions, 없으면 변속단 != P)를 OR 로 묶는다.
+     */
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     val drivingRestricted: StateFlow<Boolean> =
-        source.flatMapLatest { it.state }
-            .map { it.uxRestricted ?: false }
+        combine(source.flatMapLatest { it.state }, vehicleRestricted) { current, real -> DrivingLock.restricted(current) || real }
             .stateIn(scope, SharingStarted.Eagerly, false)
+
+    /** 지금 이 순간의 화면 잠금 값. 흐름을 거치지 않고 바로 센다(Gleo 처럼 화면 밖에서 판단할 때). */
+    fun isDrivingRestrictedNow(): Boolean =
+        DrivingLock.screenRestricted(source.value.state.value, vehicleSource.state.value.takeIf { isAutomotive })
 
     val trip = TripController(app, this)
 

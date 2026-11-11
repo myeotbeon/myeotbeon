@@ -75,3 +75,12 @@ interface SignalSource {
     /** 마지막으로 알려진 위치. 지원하지 않거나 권한이 없으면 null 을 돌려준다. */
     fun lastKnownLocation(onResult: (GeoPoint?) -> Unit) = onResult(null)
 }
+
+/**
+ * 실차 신호 출처([PleosSignalSource]). 체험 모드 출처에는 없는 것을 더한다.
+ * 앱은 이 인터페이스만 보므로, 시험에서는 가짜를 바꿔 끼운다.
+ */
+interface VehicleSignalSource : SignalSource {
+    /** 연결 과정에서 있었던 일(개발자 패널에 보인다). 개인정보는 넣지 않는다. */
+    val diagnostics: StateFlow<List<String>>
+}

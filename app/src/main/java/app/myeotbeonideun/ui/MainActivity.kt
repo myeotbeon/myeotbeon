@@ -14,6 +14,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import app.myeotbeonideun.App
 import app.myeotbeonideun.gleo.Gleo
 import app.myeotbeonideun.gleo.GleoParams
@@ -32,7 +34,11 @@ import app.myeotbeonideun.ui.theme.MyeotbeonTheme
  */
 class MainActivity : ComponentActivity() {
 
-    private val vm: AppViewModel by viewModels()
+    // 이 액티비티의 Application 으로 만든다. 기본 공장(AndroidViewModelFactory)은 처음 본 Application 을 정적으로
+    // 붙들고 있어, 시험마다 Application 이 새로 생기는 Robolectric 에서 두 번째 액티비티 시험이 옛 앱을 보게 된다.
+    private val vm: AppViewModel by viewModels {
+        viewModelFactory { initializer { AppViewModel(application) } }
+    }
 
     private val locationPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->

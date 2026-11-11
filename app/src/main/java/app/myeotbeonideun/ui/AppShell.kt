@@ -55,8 +55,9 @@ private val NAV_ITEMS = listOf(
 
 /**
  * 화면 틀. 넓은 창(가로)에서는 왼쪽에 메뉴를, 좁은 창(세로)에서는 아래에 메뉴를 둔다.
- * 주행 규제 중에는 정차 전용 화면(설정·기록·환경설정) 대신 잠금 안내를 보인다.
- * 체험 모드의 개발자 패널은 모의 신호로 '주행'을 흉내 내는 도구라 잠그지 않는다.
+ * 주행 규제 중에는 정차 전용 화면(설정·기록·환경설정) 대신 잠금 안내를 보인다([ShellUi.locked]).
+ * 체험 모드의 개발자 패널은 모의 신호로 '주행'을 흉내 내는 도구라 모의 주행만으로는 잠그지 않는다
+ * (실차가 주행 중이면 잠근다).
  *
  * @param content 지금 화면을 그린다. 둘째 인자는 넓은 창인지
  */
@@ -75,10 +76,9 @@ fun AppShell(
                 FirstNotice(onAcceptNotice)
                 return@BoxWithConstraints
             }
-            val locked = shell.restricted && shell.screen.parkedOnly && !(shell.screen == Screen.DEV && shell.demo)
             val body: @Composable (Modifier) -> Unit = { m ->
                 Box(m) {
-                    if (locked) LockedScreen(shell.tripActive, { onNavigate(Screen.COMPANION) })
+                    if (shell.locked) LockedScreen(shell.tripActive, { onNavigate(Screen.COMPANION) })
                     else content(shell.screen, wide)
                 }
             }

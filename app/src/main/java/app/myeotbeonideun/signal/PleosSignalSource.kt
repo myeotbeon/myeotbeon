@@ -67,7 +67,7 @@ import kotlinx.coroutines.flow.update
  *   엔진은 그 신호를 쓰는 기능만 끈다.
  * - 콜백은 어느 스레드에서 올지 문서에 없어 메인 스레드로 옮겨 처리한다.
  */
-class PleosSignalSource(context: Context) : SignalSource {
+class PleosSignalSource(context: Context) : VehicleSignalSource {
 
     private val appContext = context.applicationContext
     private val main = Handler(Looper.getMainLooper())
@@ -84,8 +84,7 @@ class PleosSignalSource(context: Context) : SignalSource {
     override val state: StateFlow<VehicleState> = _state.asStateFlow()
     override val navEvents: SharedFlow<NavEvent> = _navEvents.asSharedFlow()
 
-    /** 연결 과정에서 있었던 일(개발자 패널에 보인다). 개인정보는 넣지 않는다. */
-    val diagnostics: StateFlow<List<String>> = _diagnostics.asStateFlow()
+    override val diagnostics: StateFlow<List<String>> = _diagnostics.asStateFlow()
 
     private var vehicle: Vehicle? = null
     private var carApi: CarApiBridge? = null
