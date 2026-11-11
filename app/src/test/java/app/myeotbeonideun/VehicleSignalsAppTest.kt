@@ -152,6 +152,29 @@ class VehicleSourceChoiceTest {
     }
 
     @Test
+    fun `변속단도 주행 규제도 읽지 못했으면 Gleo 의 동행 시작을 받지 않는다`() {
+        // 부팅 직후 Car 서비스 연결이 실패하면 주행 중이어도 화면 잠금 값은 false 다(검토 결함 18)
+        val c = app.container
+        c.store.saveRoute(TripConfig(place = "큰딸 집"), rememberArrival = false, nowMs = 1_000)
+        fake.state.value = VehicleState() // 변속단·주행 규제 모름
+        idle()
+        assertFalse(c.isDrivingRestrictedNow())
+        assertEquals(Gleo.StartResult.MOTION_UNKNOWN, Gleo.handleStart(app, c, JSONObject()))
+        assertFalse(c.trip.inProgress)
+        val sent = shadowOf(app).broadcastIntents.last { it.action == "ai.pleos.playground.intent.action.APP_ACTION_RESPONSE" }
+        val response = JSONObject(sent.getStringExtra("response")!!)
+        assertEquals(Gleo.STATUS_FAIL, response.getString("status"))
+        assertTrue(response.getString("message").contains("gear could not be read"))
+
+        // 변속단을 읽으면(P단) 받는다
+        fake.state.value = VehicleState(gear = Gear.PARK)
+        idle(11) // 동행 시작 연속 호출 제한(10초)과 상관없게
+        assertEquals(Gleo.StartResult.STARTED, Gleo.handleStart(app, c, JSONObject()))
+        assertTrue(c.trip.inProgress)
+        c.trip.end()
+    }
+
+    @Test
     fun `실차 주행 중 Gleo 로 동행 시작을 부르면 시작하지 않고 동행 화면에서 기다린다`() {
         c().store.saveRoute(TripConfig(place = "큰딸 집"), rememberArrival = false, nowMs = 1_000)
         fake.state.value = VehicleState(gear = Gear.DRIVE, uxRestricted = true)

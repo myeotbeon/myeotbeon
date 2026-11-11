@@ -34,6 +34,12 @@ object DrivingLock {
         Gear.DRIVE, Gear.REVERSE, Gear.NEUTRAL -> false
     }
 
+    /**
+     * 정차인지 알 수 없는지: 변속단도 주행 규제도 읽지 못했다(부팅 직후 Car 서비스 연결 실패 등). 이때 [restricted] 는 false 라
+     * 화면 잠금은 풀려 있지만, 화면 밖(Gleo)에서 오는 '동행 시작'은 주행 중일 수 있으므로 받지 않는다(검토 결함 18).
+     */
+    fun motionUnknown(state: VehicleState): Boolean = state.gear == Gear.UNKNOWN && state.uxRestricted == null
+
     /** 차량 신호를 구독할지: 차량용 기기에서, 화면이 보이거나 동행 중일 때만(백그라운드에서 동행이 없으면 놓는다). */
     fun shouldSubscribe(isAutomotive: Boolean, foreground: Boolean, tripActive: Boolean): Boolean =
         isAutomotive && (foreground || tripActive)

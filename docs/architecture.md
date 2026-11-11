@@ -234,7 +234,7 @@
 | 종류 | 위치 | 수 |
 |---|---|---|
 | 엔진 단위 테스트(JVM) | `engine/src/test` | 170 |
-| 앱 단위 테스트(JVM, 일부 Robolectric) | `app/src/test` | 202 |
+| 앱 단위 테스트(JVM, 일부 Robolectric) | `app/src/test` | 204 |
 | 화면 그림(Roborazzi, 앱 단위 테스트에 포함) | `app/src/test/…/ScreenshotTest.kt` → `docs/screens` | 18장 |
 
 - `AppFlowTest` 는 실제 `Application` 을 띄워 체험 모드 신호로 출발~신호 대기~도착~기록 저장까지를 한 번에 돌립니다.

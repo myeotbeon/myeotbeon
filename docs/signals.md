@@ -178,7 +178,7 @@ Pleos Vehicle SDK 2.3.2 에는 속도·변속단 API 가 없습니다.
 |---|---|---|
 | `REPEAT_TRIP_ANSWER` (`arrived`: boolean, 선택) | service(브로드캐스트) | 다시 말씀드리기. `arrived: true` 면 정차 중 도착을 알리고 동행을 마침('도착했어요'와 같음). 응답 `mode: "silent"`(앱이 직접 말함) |
 | `PAUSE_VOICE_GUIDE` (`minutes`: number, 선택) | service(브로드캐스트) | 잠시 조용히(기본 10분, 1~60분) |
-| `START_COMPANION_TRIP` (`destinationName`: string, 선택) | activity | 저장된 '자주 가는 길'로 동행 시작. 없으면 `status: "asking"`, 주행 중이면 받지 않음(`fail`) |
+| `START_COMPANION_TRIP` (`destinationName`: string, 선택) | activity | 저장된 '자주 가는 길'로 동행 시작. 없으면 `status: "asking"`, 주행 중이거나 변속단·주행 규제를 읽지 못해 정차인지 모르면 받지 않음(`fail`) |
 
 - 수신: Intent action = 함수 이름, 파라미터 = `ACTION_PARAM` 문자열(JSON).
 - 응답: `ai.pleos.playground.intent.action.APP_ACTION_RESPONSE` 브로드캐스트(extra `packageName`, `response`). 받는 쪽을 정하지 못해

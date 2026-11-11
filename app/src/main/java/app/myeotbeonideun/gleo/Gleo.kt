@@ -8,6 +8,7 @@ import app.myeotbeonideun.App
 import app.myeotbeonideun.AppContainer
 import app.myeotbeonideun.data.SavedRoute
 import app.myeotbeonideun.service.ArrivalConfirm
+import app.myeotbeonideun.signal.DrivingLock
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -34,6 +35,7 @@ import org.json.JSONObject
  * - 그래서 기기 안의 다른 앱도 동행 중 '다시 말하기'·'다 왔다고 말하기'·'잠시 조용히'와 정차 중 '동행 시작'을 부를 수
  *   있다. 줄인 것:
  *   - 동행이 없으면 앞의 셋은 아무 일도 하지 않는다. '다 왔다고 말하기'와 '동행 시작'은 정차(P단) 중에만 받는다.
+ *     차량용 기기에서 변속단도 주행 규제도 읽지 못했으면(부팅 직후 등) 정차인지 모르므로 '동행 시작'을 받지 않는다.
  *   - '동행 시작'은 저장된 '자주 가는 길'로만 시작한다(바깥에서 가는 곳·호칭을 정하지 못한다).
  *   - 연속 호출 제한([GleoLimits]): 말하기 4초에 한 번·1분에 네 번, 조용히 같은 수, 동행 시작 10초에 한 번·10분에 세 번.
  *     차가 쉬지 않고 말하게 하거나 동행을 거듭 시작하지 못한다.
@@ -181,6 +183,8 @@ object Gleo {
         DRIVING,
         /** 짧은 사이에 거듭 불러 받지 않았다(연속 호출 제한). */
         TOO_MANY,
+        /** 차량용 기기에서 변속단도 주행 규제도 읽지 못해 정차인지 모른다(받지 않았다). */
+        MOTION_UNKNOWN,
     }
 
     /**
@@ -198,6 +202,15 @@ object Gleo {
         if (container.isDrivingRestrictedNow()) {
             respond(context, ACTION_START, STATUS_FAIL, "A companion trip can only be started while the car is parked.")
             return StartResult.DRIVING
+        }
+        // 변속단도 주행 규제도 읽지 못했으면(부팅 직후 Car 서비스 연결 실패 등) 위 값은 false 지만 주행 중일 수 있다.
+        // 화면 밖에서 오는 호출이라 운전자가 차를 세웠는지 볼 수 없으므로 받지 않는다(화면에서는 시작할 수 있다).
+        if (container.isAutomotive && DrivingLock.motionUnknown(container.vehicleSource.state.value)) {
+            respond(
+                context, ACTION_START, STATUS_FAIL,
+                "The car's gear could not be read, so a companion trip can only be started on the screen while parked.",
+            )
+            return StartResult.MOTION_UNKNOWN
         }
         val route = pickRoute(container.store.routes.value, params.optString("destinationName"))
         if (route == null) {

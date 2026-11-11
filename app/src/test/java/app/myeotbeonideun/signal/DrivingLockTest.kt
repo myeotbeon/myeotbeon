@@ -33,6 +33,14 @@ class DrivingLockTest {
     }
 
     @Test
+    fun `변속단도 주행 규제도 모르면 정차인지 모른다`() {
+        assertTrue(DrivingLock.motionUnknown(VehicleState()))
+        assertFalse(DrivingLock.motionUnknown(VehicleState(gear = Gear.PARK)))
+        assertFalse(DrivingLock.motionUnknown(VehicleState(uxRestricted = false)))
+        assertFalse(DrivingLock.motionUnknown(drivingCar))
+    }
+
+    @Test
     fun `체험 모드의 모의 P단이어도 실차가 달리면 잠근다`() {
         assertTrue(DrivingLock.screenRestricted(current = parkedDemo, vehicle = drivingCar))
         assertTrue(DrivingLock.screenRestricted(current = parkedDemo, vehicle = VehicleState(gear = Gear.DRIVE)))
