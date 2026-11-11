@@ -22,6 +22,8 @@ sealed interface EngineAction
 /**
  * 동승자에게 말한다.
  * @property interrupt true 면 지금 하던 말을 끊고 말한다
+ * @property id 말마다 붙는 번호. 실제로 소리 냈는지를 [CompanionEngine.onUtteranceResult] 로 알려 줄 때 쓴다.
+ *   기록의 횟수는 그 결과로만 올라간다(엔진이 말하기로 한 것만으로는 세지 않는다)
  */
 data class Speak(
     val text: String,
@@ -29,6 +31,7 @@ data class Speak(
     val priority: Priority,
     val kind: SpeechKind,
     val interrupt: Boolean,
+    val id: Long = 0,
 ) : EngineAction
 
 /**

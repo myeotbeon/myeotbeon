@@ -59,14 +59,15 @@ class AppStoreTest {
     @Test
     fun `기록은 횟수와 시간만 저장한다`() {
         val store = AppStore(context)
-        store.addRecord(TripRecord(5_000, 600, TripCounts(3, 2, 1, 4, 1)))
+        store.addRecord(TripRecord(5_000, 600, TripCounts(3, 2, 1, 4, 1, skipped = 2)))
         val stored = context.getSharedPreferences("myeotbeon", Context.MODE_PRIVATE).getString("records", "")!!
         val keys = JSONArray(stored).getJSONObject(0).keys().asSequence().toSet()
         assertEquals(
-            setOf("startedAtMs", "durationSec", "proactive", "driverRequested", "answered", "stopNotices", "safetyNotices"),
+            setOf("startedAtMs", "durationSec", "proactive", "driverRequested", "answered", "stopNotices", "safetyNotices", "skipped"),
             keys,
         )
-        assertEquals(10, AppStore(context).records.value.single().counts.handled)
+        assertEquals(10, AppStore(context).records.value.single().counts.spokenOnBehalf)
+        assertEquals(2, AppStore(context).records.value.single().counts.skipped)
     }
 
     @Test

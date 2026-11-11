@@ -205,6 +205,7 @@ class AppStore(context: Context) {
             .put("answered", counts.answered)
             .put("stopNotices", counts.stopNotices)
             .put("safetyNotices", counts.safetyNotices)
+            .put("skipped", counts.skipped)
 
         internal fun JSONObject.toRecord(): TripRecord = TripRecord(
             startedAtMs = getLong("startedAtMs"),
@@ -215,6 +216,7 @@ class AppStore(context: Context) {
                 answered = optInt("answered", 0),
                 stopNotices = optInt("stopNotices", 0),
                 safetyNotices = optInt("safetyNotices", 0),
+                skipped = optInt("skipped", 0),
             ),
         )
 

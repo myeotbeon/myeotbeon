@@ -25,7 +25,9 @@ import app.myeotbeonideun.engine.stop.StopReason
  * - 문장은 대본(ScriptBook)의 고정 문장만 쓴다. 실행 중에 문장을 만들지 않는다.
  * - 한 번의 이동에 인스턴스 하나를 쓴다. 한 스레드에서만 부른다.
  *
- * 쓰는 순서: [start] → ([onSignals] | [onTick] | [requestRepeat] | [quiet] | [onPassengerAsked])* → [finish]
+ * 쓰는 순서: [start] → ([onSignals] | [onTick] | [requestRepeat] | [quiet] | [onPassengerAsked] | [onUtteranceResult])* → [finish]
+ *
+ * 기록의 횟수는 바깥(음성)이 [onUtteranceResult] 로 '실제로 소리 냈다'고 알려 준 말만 센다.
  */
 class CompanionEngine(
     private val book: ScriptBook,
@@ -53,12 +55,21 @@ class CompanionEngine(
     private var awayNoticeAt = 0L
     private var stopNoticeAt: Long? = null
 
-    // 신호 반응(문·창문·안전띠)
+    // 신호 반응(문·창문·안전띠). 한 번의 일(문 한 번 열림 등)마다 번호를 붙여, 되풀이 안내를 한 건으로 센다.
     private var doorAlertAt: Long? = null
+    private var doorEvent = 0L
     private var windowAlerted = false
     private var windowAlertAt = 0L
+    private var windowEvent = 0L
     private var beltSince: Long? = null
     private var beltStep = 0
+    private var beltEvent = 0L
+    private var nextEvent = 0L
+
+    // 말 번호와, 실제로 소리 냈는지 기다리는 말
+    private var nextSpeakId = 0L
+    private val awaitingResult = HashMap<Long, Utterance>()
+    private val countedEvents = HashSet<Long>()
 
     // 말하기 통로
     private var busyUntil = Long.MIN_VALUE
@@ -89,7 +100,12 @@ class CompanionEngine(
         val redirectEligible: Boolean = false,
         /** '잠시 조용히' 중에도 하는 말인지. */
         val ignoreQuiet: Boolean = false,
+        /** 안전 안내가 어느 일(문 한 번 열림 등)에 대한 것인지. 같은 일의 되풀이 안내는 한 건으로 센다. */
+        val eventKey: Long? = null,
     )
+
+    /** 내보낸 말이 무엇이었는지. 실제로 소리 냈다는 결과가 오면 그때 센다. */
+    private data class Utterance(val kind: SpeechKind, val eventKey: Long?)
 
     // ───────────────────────── 바깥에서 부르는 것 ─────────────────────────
 
@@ -194,10 +210,38 @@ class CompanionEngine(
         busyUntil = if (speaking) maxOf(busyUntil, nowMs + 1_000) else minOf(busyUntil, nowMs)
     }
 
-    /** 동행을 끝내고 기록(횟수와 시간)을 돌려준다. */
+    /**
+     * 엔진이 시킨 말([Speak])을 실제로 소리 내 읽었는지 알려 준다. 기록의 횟수는 이것으로만 올라간다.
+     *
+     * @param id [Speak.id]
+     * @param spoken true = 끝까지 소리 내 읽음. false = 소리 내지 못함(오디오 포커스 거절, 음성 엔진 없음,
+     *   다른 말에 끊김) — 그 말은 [TripCounts.skipped] 로 따로 센다
+     */
+    fun onUtteranceResult(id: Long, spoken: Boolean) {
+        if (phase == Phase.ENDED) return
+        val u = awaitingResult.remove(id) ?: return
+        if (!spoken) {
+            counts = counts.copy(skipped = counts.skipped + 1)
+            return
+        }
+        counts = when (u.kind) {
+            SpeechKind.PROACTIVE -> counts.copy(proactive = counts.proactive + 1)
+            SpeechKind.DRIVER_REQUEST -> counts.copy(driverRequested = counts.driverRequested + 1)
+            SpeechKind.ANSWER -> counts.copy(answered = counts.answered + 1)
+            SpeechKind.STOP -> counts.copy(stopNotices = counts.stopNotices + 1)
+            // 같은 일(문 한 번 열림 등)의 되풀이 안내는 처음 소리 낸 것 하나만 센다.
+            SpeechKind.SAFETY ->
+                if (u.eventKey == null || countedEvents.add(u.eventKey)) counts.copy(safetyNotices = counts.safetyNotices + 1)
+                else counts
+            SpeechKind.INTRO -> counts
+        }
+    }
+
+    /** 동행을 끝내고 기록(횟수와 시간)을 돌려준다. 결과를 아직 모르는 말은 세지 않는다. */
     fun finish(nowMs: Long): TripRecord {
         phase = Phase.ENDED
         pending.clear()
+        awaitingResult.clear()
         return TripRecord(
             startedAtMs = startedAt,
             durationSec = ((nowMs - startedAt) / 1000).toInt().coerceAtLeast(0),
@@ -270,10 +314,13 @@ class CompanionEngine(
         if (driving && s.seatDoorOpen == true) {
             val last = doorAlertAt
             if (last == null || now - last >= params.doorRepeatMs) {
-                if (last == null) counts = counts.copy(safetyNotices = counts.safetyNotices + 1)
+                if (last == null) doorEvent = ++nextEvent
                 doorAlertAt = now
                 notify("door_open_d", urgent = true, now, out)
-                offer(Candidate("door_open_p", Priority.SAFETY, SpeechKind.SAFETY, now, ignoreQuiet = true), now, out)
+                offer(
+                    Candidate("door_open_p", Priority.SAFETY, SpeechKind.SAFETY, now, ignoreQuiet = true, eventKey = doorEvent),
+                    now, out,
+                )
             }
         } else {
             doorAlertAt = null
@@ -290,11 +337,12 @@ class CompanionEngine(
             if (driving && pct >= params.windowThresholdPercent &&
                 (!windowAlerted || now - windowAlertAt >= params.windowRepeatMs)
             ) {
-                if (!windowAlerted) counts = counts.copy(safetyNotices = counts.safetyNotices + 1)
+                // 횟수는 말을 실제로 소리 냈을 때 센다('잠시 조용히' 중이라 화면에만 알린 것은 세지 않는다).
+                if (!windowAlerted) windowEvent = ++nextEvent
                 windowAlerted = true
                 windowAlertAt = now
                 notify("window_open_d", urgent = false, now, out)
-                offer(Candidate("window_open_p", Priority.SAFETY, SpeechKind.SAFETY, now), now, out)
+                offer(Candidate("window_open_p", Priority.SAFETY, SpeechKind.SAFETY, now, eventKey = windowEvent), now, out)
             }
         }
 
@@ -303,11 +351,11 @@ class CompanionEngine(
             val since = beltSince ?: now.also {
                 beltSince = it
                 beltStep = 0
-                counts = counts.copy(safetyNotices = counts.safetyNotices + 1)
+                beltEvent = ++nextEvent
             }
             if (beltStep <= params.beltPrompts && now - since >= beltStep * params.beltPromptGapMs) {
                 if (beltStep < params.beltPrompts) {
-                    offer(Candidate("belt_off_p", Priority.SAFETY, SpeechKind.SAFETY, now), now, out)
+                    offer(Candidate("belt_off_p", Priority.SAFETY, SpeechKind.SAFETY, now, eventKey = beltEvent), now, out)
                 } else {
                     notify("belt_off_d", urgent = true, now, out)
                 }
@@ -565,19 +613,15 @@ class CompanionEngine(
             answerCount++
             if (answerCount % params.redirectEvery == 0) redirectLine()?.let { text = "$text $it" }
         }
-        out += Speak(text, c.situation, c.priority, c.kind, interrupt)
+        val id = ++nextSpeakId
+        out += Speak(text, c.situation, c.priority, c.kind, interrupt, id)
+        // 여기서는 세지 않는다. 실제로 소리 냈다는 결과(onUtteranceResult)가 오면 센다.
+        awaitingResult[id] = Utterance(c.kind, c.eventKey)
         busyUntil = now + estimateSpeechMs(text)
         busyPriority = c.priority
         lastPassengerSpeechAt = now
         lastLine = text
         lastLineAt = now
-        counts = when (c.kind) {
-            SpeechKind.PROACTIVE -> counts.copy(proactive = counts.proactive + 1)
-            SpeechKind.DRIVER_REQUEST -> counts.copy(driverRequested = counts.driverRequested + 1)
-            SpeechKind.ANSWER -> counts.copy(answered = counts.answered + 1)
-            SpeechKind.STOP -> counts.copy(stopNotices = counts.stopNotices + 1)
-            SpeechKind.INTRO, SpeechKind.SAFETY -> counts
-        }
     }
 
     /** 화제 전환 한마디. 목적이 없으면 붙이지 않는다. 직접 쓴 한마디는 그대로 읽는다. */

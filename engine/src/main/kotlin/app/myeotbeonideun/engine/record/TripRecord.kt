@@ -2,21 +2,29 @@ package app.myeotbeonideun.engine.record
 
 /**
  * 한 번의 이동에서 센 횟수. 기록은 횟수뿐이다(누가 무슨 말을 했는지는 남기지 않는다).
+ *
+ * 모두 '실제로 소리 내 읽은 말'만 센다. 엔진이 말하기로 했어도 오디오 포커스를 얻지 못했거나 음성 엔진이 없어
+ * 소리 내지 못한 말, 다른 말에 끊긴 말은 [skipped] 로 따로 센다([app.myeotbeonideun.engine.CompanionEngine.onUtteranceResult]).
  */
 data class TripCounts(
     /** 차가 먼저 말한 횟수(출발·구간·간격 안내). */
     val proactive: Int = 0,
-    /** 운전자가 '다시 말씀드리기'로 시킨 횟수. */
+    /** 운전자가 '다시 말씀드리기'로 시켜서 차가 말한 횟수. */
     val driverRequested: Int = 0,
     /** 물음을 알아듣고 대답한 횟수(실험 기능). */
     val answered: Int = 0,
     /** 멈춤 안내(신호 대기·정체·잠깐 정차·운전자 이탈과 복귀·도착). */
     val stopNotices: Int = 0,
-    /** 문·창문·안전띠 안내. */
+    /** 문·창문·안전띠 안내. 한 번의 일(문 한 번 열림 등)을 한 건으로 센다. */
     val safetyNotices: Int = 0,
+    /** 말하기로 했지만 소리 내지 못한 말(포커스 거절·음성 엔진 없음·끊김). 위 횟수에는 들지 않는다. */
+    val skipped: Int = 0,
 ) {
-    /** 운전자가 직접 대답하지 않아도 된 횟수. 이 앱이 주장하는 것은 여기까지다(명세 2). */
-    val handled: Int get() = proactive + driverRequested + answered + stopNotices
+    /**
+     * 차가 대신 말한 횟수 = 먼저 말하기 + 다시 말씀드리기 + 물음 대답 + 멈춤 안내(실제로 소리 낸 것만).
+     * 이 앱이 주장하는 것은 여기까지다(명세 2). '물음을 대신 받은 횟수'가 아니고, 안전 안내는 넣지 않는다.
+     */
+    val spokenOnBehalf: Int get() = proactive + driverRequested + answered + stopNotices
 
     operator fun plus(o: TripCounts) = TripCounts(
         proactive + o.proactive,
@@ -24,6 +32,7 @@ data class TripCounts(
         answered + o.answered,
         stopNotices + o.stopNotices,
         safetyNotices + o.safetyNotices,
+        skipped + o.skipped,
     )
 }
 
@@ -51,9 +60,9 @@ object RecordAggregator {
         )
     }
 
-    /** 최근 n번 이동의 '직접 대답하지 않아도 된 횟수'. 오래된 것부터. */
+    /** 최근 n번 이동의 '차가 대신 말한 횟수'. 오래된 것부터. */
     fun recentTrend(records: List<TripRecord>, n: Int = 8): List<Int> =
-        records.sortedBy { it.startedAtMs }.takeLast(n).map { it.counts.handled }
+        records.sortedBy { it.startedAtMs }.takeLast(n).map { it.counts.spokenOnBehalf }
 
     /** 보관할 기록 수를 넘으면 오래된 것부터 버린다. */
     fun trim(records: List<TripRecord>, keep: Int = 60): List<TripRecord> =

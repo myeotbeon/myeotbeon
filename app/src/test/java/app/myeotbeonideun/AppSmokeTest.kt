@@ -74,7 +74,11 @@ class AppFlowTest {
 
         assertTrue(c.trip.repeat())
         idle(12)
-        assertEquals(1, snapshot().counts.driverRequested)
+        // 시험 환경(Robolectric)에는 음성 엔진이 없어 말이 모두 '소리 내지 못함'으로 돌아온다.
+        // 기록은 실제로 소리 낸 말만 세므로 '다시 말씀드리기'는 횟수에 들지 않고 건너뜀으로 센다.
+        assertTrue(c.speech.engineMissing.value)
+        assertEquals(0, snapshot().counts.driverRequested)
+        assertTrue(snapshot().counts.skipped >= 3) // 소개, 출발, 다시 말씀드리기
 
         // 모의 주행: 남은 시간이 스스로 줄어 구간이 바뀐다
         idle(70)
@@ -101,7 +105,8 @@ class AppFlowTest {
         idle(1)
         assertNull(c.trip.ui.value)
         val record = c.store.records.value.single()
-        assertTrue(record.counts.handled >= 4)
+        assertEquals("소리 내지 못한 말은 '차가 대신 말한 횟수'에 넣지 않는다", 0, record.counts.spokenOnBehalf)
+        assertTrue(record.counts.skipped >= 4)
         assertTrue(record.durationSec >= 120)
     }
 
@@ -129,9 +134,12 @@ class AppFlowTest {
         c.trip.start(TripConfig(place = "큰딸 집"))
         c.demoSource.update { it.copy(gear = Gear.DRIVE) }
         idle(25)
+        val skippedBefore = snapshot().counts.skipped
         receiver.onReceive(app, Intent(Gleo.ACTION_REPEAT))
         idle(1)
-        assertEquals(1, snapshot().counts.driverRequested)
+        // 다시 말하기가 실행됐다. 시험 환경에는 음성 엔진이 없어 횟수가 아니라 건너뜀으로 센다.
+        assertEquals(skippedBefore + 1, snapshot().counts.skipped)
+        assertEquals(0, snapshot().counts.driverRequested)
         assertEquals("silent", lastGleoResponse().getString("mode")) // 앱이 직접 말하므로 Gleo 는 말하지 않는다
 
         receiver.onReceive(app, Intent(Gleo.ACTION_PAUSE).putExtra(Gleo.EXTRA_PARAM, """{"minutes":5}"""))

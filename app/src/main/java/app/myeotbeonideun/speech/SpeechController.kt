@@ -27,6 +27,7 @@ import kotlinx.coroutines.sync.withLock
  *   끝내 얻지 못하면 그 말은 하지 않는다(화면에는 남는다).
  * - 포커스를 잃으면(LOSS, LOSS_TRANSIENT) 즉시 멈추고 돌려준다. CAN_DUCK 은 시스템이 낮추도록 둔다.
  * - 선행 묵음 약 200ms, 문장 사이 쉼 350ms 로 천천히 전한다(명세 3.6 R5).
+ * - 말마다 끝까지 소리 냈는지(또는 건너뛰었는지)를 [speak] 의 onResult 로 돌려준다. 기록의 횟수는 그것으로만 센다.
  */
 class SpeechController(
     context: Context,
@@ -57,7 +58,10 @@ class SpeechController(
             .setOnAudioFocusChangeListener(focusListener, Handler(Looper.getMainLooper()))
             .build()
 
-    private val queue = ArrayDeque<String>()
+    /** 기다리는 말. onResult 는 말이 끝나거나 버려질 때 꼭 한 번 불린다. */
+    private class Pending(val text: String, val onResult: ((Boolean) -> Unit)?)
+
+    private val queue = ArrayDeque<Pending>()
     private var worker: Job? = null
     private var generation = 0
     private var hasFocus = false
@@ -91,10 +95,12 @@ class SpeechController(
 
     /**
      * @param interrupt true 면 하던 말과 기다리던 말을 버리고 이 말을 한다
+     * @param onResult 끝까지 소리 냈으면 true, 소리 내지 못했으면(포커스 거절, 음성 엔진 없음, 끊김·버림) false.
+     *   메인 스레드에서 한 번 불린다
      */
-    fun speak(text: String, interrupt: Boolean) {
+    fun speak(text: String, interrupt: Boolean, onResult: ((Boolean) -> Unit)? = null) {
         if (interrupt) cancelCurrent()
-        queue.addLast(text)
+        queue.addLast(Pending(text, onResult))
         _speaking.value = true
         if (worker?.isActive != true) worker = scope.launch { drain() }
     }
@@ -106,8 +112,10 @@ class SpeechController(
 
     private fun cancelCurrent() {
         generation++
+        val dropped = queue.toList()
         queue.clear()
         active?.stop()
+        dropped.forEach { it.onResult?.invoke(false) }
     }
 
     /** 운전자에게 주는 짧은 알림음. 어르신을 놀라게 하지 않도록 낮은 음량의 짧은 두 음을 쓴다. */
@@ -140,14 +148,15 @@ class SpeechController(
     private suspend fun drain() {
         try {
             while (true) {
-                val text = queue.removeFirstOrNull() ?: break
+                val next = queue.removeFirstOrNull() ?: break
                 val speaker = ensureSpeaker()
                 if (speaker == null || !acquireFocus()) {
-                    _lastSkipped.value = text
+                    _lastSkipped.value = next.text
+                    next.onResult?.invoke(false)
                     continue
                 }
                 _lastSkipped.value = null
-                say(text)
+                next.onResult?.invoke(say(next.text))
             }
         } finally {
             _speaking.value = false
@@ -155,25 +164,27 @@ class SpeechController(
         }
     }
 
-    private suspend fun say(text: String) {
+    /** @return 모든 문장을 끝까지 소리 냈으면 true(끊기거나 엔진이 실패하면 false) */
+    private suspend fun say(text: String): Boolean {
         val gen = generation
         val sentences = text.split(SENTENCE_BREAK).filter { it.isNotBlank() }
         for ((i, sentence) in sentences.withIndex()) {
-            if (gen != generation) return
+            if (gen != generation) return false
             // 선행 묵음: 엔진이 오디오 앞에 무음을 직접 넣지 못하면 재생을 그만큼 늦춘다.
             val preroll = if (active?.addsPrerollSilence == true) 0L else PREROLL_SILENCE_MS
             delay(if (i == 0) preroll else SENTENCE_GAP_MS)
-            if (gen != generation) return
+            if (gen != generation) return false
             var ok = active?.speak(sentence) ?: false
             if (!ok && gen == generation) {
                 // 끊긴 것이 아니라 엔진이 실패했다. 남은 엔진이 있으면 바꿔서 한 번 더 읽는다.
-                if (nextSpeakerIndex >= speakers.size) return
+                if (nextSpeakerIndex >= speakers.size) return false
                 active?.release()
                 active = null
                 ok = ensureSpeaker()?.speak(sentence) ?: false
-                if (!ok) return
             }
+            if (!ok) return false
         }
+        return gen == generation && sentences.isNotEmpty()
     }
 
     /** 쓸 수 있는 엔진을 순서대로 찾는다(Pleos → 안드로이드). */

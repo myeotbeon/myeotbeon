@@ -158,7 +158,16 @@ class TripController(private val context: Context, private val c: AppContainer) 
     private fun perform(actions: List<EngineAction>) {
         for (action in actions) {
             when (action) {
-                is Speak -> c.speech.speak(action.text, action.interrupt)
+                is Speak -> {
+                    val e = engine
+                    c.speech.speak(action.text, action.interrupt) { spoken ->
+                        // 기록은 실제로 소리 낸 말만 센다. 그새 동행이 끝났거나 바뀌었으면 버린다.
+                        if (e != null && engine === e) {
+                            e.onUtteranceResult(action.id, spoken)
+                            publish()
+                        }
+                    }
+                }
                 is DriverNotice -> if (action.urgent) c.speech.chime()
                 Silence -> c.speech.stop()
             }

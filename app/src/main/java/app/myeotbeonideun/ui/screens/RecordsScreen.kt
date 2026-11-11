@@ -59,7 +59,7 @@ fun RecordsScreen(ui: RecordsUi, modifier: Modifier = Modifier) {
 
         Panel {
             Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text(stringResource(R.string.records_count, c.handled), style = AppType.hero, color = colors.accent)
+                Text(stringResource(R.string.records_count, c.spokenOnBehalf), style = AppType.hero, color = colors.accent)
                 Text(stringResource(R.string.records_handled), style = AppType.line, color = colors.text, modifier = Modifier.padding(bottom = 8.dp))
             }
             Text(

@@ -8,6 +8,7 @@ import app.myeotbeonideun.engine.model.NavState
 import app.myeotbeonideun.engine.model.Purpose
 import app.myeotbeonideun.engine.model.Signals
 import app.myeotbeonideun.engine.model.TripConfig
+import app.myeotbeonideun.engine.record.TripCounts
 import app.myeotbeonideun.engine.script.Audience
 import app.myeotbeonideun.engine.script.ScriptBook
 import app.myeotbeonideun.engine.script.Situation
@@ -20,10 +21,16 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** 엔진에 신호와 시간을 넣어 보고 나온 말을 모으는 시험대. 시각은 0부터 손으로 흘린다. */
+/**
+ * 엔진에 신호와 시간을 넣어 보고 나온 말을 모으는 시험대. 시각은 0부터 손으로 흘린다.
+ *
+ * @param speakResult 엔진이 시킨 말마다 음성 쪽이 돌려줄 결과. true = 소리 냄, false = 소리 내지 못함,
+ *   null = 결과를 알려 주지 않음. 기록의 횟수는 이 결과로만 올라간다.
+ */
 private class Rig(
     config: TripConfig = TripConfig(place = "큰딸 집", purpose = Purpose.MEAL, interval = IntervalMode.OFF),
     params: EngineParams = EngineParams(),
+    var speakResult: Boolean? = true,
 ) {
     val engine = CompanionEngine(TestScripts.book, config, params)
     var now = 0L
@@ -40,7 +47,11 @@ private class Rig(
     )
     val log = ArrayList<Pair<Long, EngineAction>>()
 
-    private fun record(actions: List<EngineAction>) = actions.forEach { log += now to it }
+    private fun record(actions: List<EngineAction>) = actions.forEach { action ->
+        log += now to action
+        val result = speakResult
+        if (action is Speak && result != null) engine.onUtteranceResult(action.id, result)
+    }
 
     /** 동행을 시작하고 지금의 차량 신호를 한 번 넣는다(앱이 하는 순서 그대로). */
     fun start() {
@@ -755,9 +766,76 @@ class CompanionEngineTest {
         assertEquals(1, record.counts.driverRequested)
         assertEquals(1, record.counts.stopNotices)
         assertEquals(1, record.counts.safetyNotices)
-        assertEquals(3, record.counts.handled)
+        assertEquals(3, record.counts.spokenOnBehalf)
+        assertEquals(0, record.counts.skipped)
         assertEquals(Phase.ENDED, rig.snapshot().phase)
         assertTrue(rig.engine.onTick(rig.now + 1000).isEmpty())
+    }
+
+    @Test
+    fun `소리 내지 못한 말은 횟수에 넣지 않고 건너뜀으로 따로 센다`() {
+        // 통화 중이라 오디오 포커스를 못 얻었거나 음성 엔진이 없는 경우
+        val rig = Rig(speakResult = false)
+        rig.startAndDepart()
+        rig.repeat(); rig.advance(12)
+        rig.set { copy(brakePressed = true) }; rig.advance(21)
+        val said = rig.spoken()
+        assertEquals(listOf("intro", "depart", "ask_where", "stop_signal"), said.map { it.situation })
+        val counts = rig.engine.finish(rig.now).counts
+        assertEquals(0, counts.proactive)
+        assertEquals(0, counts.driverRequested)
+        assertEquals(0, counts.stopNotices)
+        assertEquals("차가 대신 말한 횟수는 실제로 소리 낸 것만", 0, counts.spokenOnBehalf)
+        assertEquals(said.size, counts.skipped)
+    }
+
+    @Test
+    fun `결과를 알려 주지 않은 말은 세지 않는다`() {
+        val rig = Rig(speakResult = null)
+        rig.startAndDepart()
+        rig.repeat(); rig.advance(12)
+        assertEquals(TripCounts(), rig.engine.finish(rig.now).counts)
+    }
+
+    @Test
+    fun `말마다 다른 번호가 붙고 같은 결과를 두 번 알려도 한 번만 센다`() {
+        val rig = Rig(speakResult = null)
+        rig.startAndDepart()
+        rig.repeat(); rig.advance(12)
+        val ids = rig.spoken().map { it.id }
+        assertEquals(ids.size, ids.toSet().size)
+        val answer = rig.spoken("ask_where").single()
+        rig.engine.onUtteranceResult(answer.id, true)
+        rig.engine.onUtteranceResult(answer.id, true)
+        rig.engine.onUtteranceResult(9_999, true) // 모르는 번호는 버린다
+        assertEquals(1, rig.snapshot().counts.driverRequested)
+        assertEquals(1, rig.snapshot().counts.spokenOnBehalf)
+    }
+
+    @Test
+    fun `처음 안내를 소리 내지 못해도 되풀이 안내를 소리 내면 그 일을 한 건으로 센다`() {
+        val rig = Rig()
+        rig.startAndDepart()
+        rig.speakResult = false
+        rig.set { copy(seatDoorOpen = true) }
+        assertEquals(0, rig.snapshot().counts.safetyNotices)
+        rig.speakResult = true
+        rig.advance(16)
+        rig.advance(16)
+        assertEquals(3, rig.spoken("door_open_p").size)
+        assertEquals(1, rig.snapshot().counts.safetyNotices)
+        assertEquals(1, rig.snapshot().counts.skipped)
+    }
+
+    @Test
+    fun `잠시 조용히 중 화면에만 알린 창문 안내는 횟수에 들지 않는다`() {
+        val rig = Rig()
+        rig.startAndDepart()
+        rig.quiet()
+        rig.set { copy(seatWindowOpenPercent = 50) }
+        assertEquals("window_open_d", rig.notices().single().situation)
+        assertTrue(rig.spoken("window_open_p").isEmpty())
+        assertEquals(0, rig.snapshot().counts.safetyNotices)
     }
 
     @Test

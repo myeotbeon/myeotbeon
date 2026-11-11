@@ -49,8 +49,18 @@ class RecordAggregatorTest {
         assertEquals(2, day.trips)
         assertEquals(1200, day.durationSec)
         assertEquals(5, day.counts.proactive)
-        assertEquals(6, day.counts.handled) // 안전 안내는 '대신 대답한 횟수'에 넣지 않는다
+        assertEquals(6, day.counts.spokenOnBehalf) // 안전 안내는 '차가 대신 말한 횟수'에 넣지 않는다
         assertEquals(2, day.counts.safetyNotices)
+    }
+
+    @Test
+    fun `건너뛴 말도 하루치로 합치지만 대신 말한 횟수에는 넣지 않는다`() {
+        val a = TripRecord(100, 600, TripCounts(proactive = 2, skipped = 3))
+        val b = TripRecord(200, 600, TripCounts(stopNotices = 1, skipped = 1))
+        val day = RecordAggregator.summarize(listOf(a, b), 0, 1_000)
+        assertEquals(4, day.counts.skipped)
+        assertEquals(3, day.counts.spokenOnBehalf)
+        assertEquals(listOf(2, 1), RecordAggregator.recentTrend(listOf(b, a)))
     }
 
     @Test
