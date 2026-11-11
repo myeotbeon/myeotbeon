@@ -9,12 +9,15 @@ import app.myeotbeonideun.AppContainer
 import app.myeotbeonideun.BuildConfig
 import app.myeotbeonideun.R
 import app.myeotbeonideun.data.SavedRoute
+import app.myeotbeonideun.engine.CompanionEngine
 import app.myeotbeonideun.engine.Phase
 import app.myeotbeonideun.engine.journey.Stage
+import app.myeotbeonideun.engine.model.Purpose
 import app.myeotbeonideun.engine.model.SeatPosition
 import app.myeotbeonideun.engine.model.VehicleState
 import app.myeotbeonideun.engine.record.RecordAggregator
 import app.myeotbeonideun.engine.script.ScriptEngine
+import app.myeotbeonideun.engine.script.ScriptValidator
 import app.myeotbeonideun.engine.script.SlotValues
 import app.myeotbeonideun.service.TripUi
 import app.myeotbeonideun.signal.DemoSignalSource
@@ -185,6 +188,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app), DevPanelActions {
                 seatSignalAvailable = cap.seatOccupancy,
                 locationAvailable = cap.location,
                 preview = if (form.canStart) preview(form) else "",
+                customLineProblem = customLineProblem(form),
             )
         }.stateIn(viewModelScope, SharingStarted.Eagerly, SetupUi(_form.value))
 
@@ -229,6 +233,38 @@ class AppViewModel(app: Application) : AndroidViewModel(app), DevPanelActions {
     private fun preview(form: SetupForm): String {
         val template = c.script.situation("depart")?.lines?.firstOrNull() ?: return ""
         return ScriptEngine.render(template, SlotValues(form.honorific.trim(), form.place.trim(), form.driver.trim()))
+    }
+
+    /**
+     * 직접 쓴 화제 전환 한마디를 엔진의 검사(CompanionEngine.checkCustomPurposeLine — 대본의 화제 전환 줄과 같은 규칙)로
+     * 입력할 때 바로 본다(결함 16-6). 엔진은 이 검사를 통과한 한마디만 읽으므로, 통과하지 못하면 "이대로면 읽지 않아요"와
+     * 고칠 것을 알려 준다. 동행 시작은 막지 않는다(한마디 없이 대답만 한다). 문제가 없으면 null.
+     */
+    private fun customLineProblem(form: SetupForm): String? {
+        if (form.purpose != Purpose.CUSTOM || form.customPurposeLine.isBlank()) return null
+        val honorific = form.honorific.trim()
+        val findings = CompanionEngine.checkCustomPurposeLine(form.customPurposeLine, honorific)
+        if (findings.isEmpty()) return null
+        val line = CompanionEngine.customRedirectText(form.customPurposeLine, honorific).orEmpty()
+        val reasons = findings.mapNotNull { f ->
+            when (f.rule) {
+                "R2" -> {
+                    val sentences = ScriptValidator.splitSentences(line)
+                    if (sentences.size > ScriptValidator.MAX_SENTENCES_REDIRECT) text(R.string.custom_line_sentences)
+                    else text(
+                        R.string.custom_line_too_long,
+                        sentences.maxOfOrNull { ScriptValidator.countSyllables(it) } ?: 0,
+                        ScriptValidator.MAX_SYLLABLES_PER_SENTENCE,
+                    )
+                }
+                "R3" -> ScriptValidator.findForbidden(line)?.let { text(R.string.custom_line_forbidden, it) }
+                "S" -> ScriptValidator.UNSAFE.firstOrNull { line.contains(it) }?.let { text(R.string.custom_line_unsafe, it) }
+                "D" -> text(R.string.custom_line_dignity)
+                "F-슬롯" -> text(R.string.custom_line_braces)
+                else -> null
+            }
+        }.distinct()
+        return text(R.string.custom_line_problem, reasons.joinToString(" ").ifEmpty { text(R.string.custom_line_other) })
     }
 
     // ───────────────────────── 동행 중 ─────────────────────────

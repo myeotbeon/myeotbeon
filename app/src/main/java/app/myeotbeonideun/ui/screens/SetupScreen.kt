@@ -1,6 +1,8 @@
 package app.myeotbeonideun.ui.screens
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -12,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.OutlinedTextField
@@ -21,6 +24,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -95,6 +99,8 @@ data class SetupUi(
     val locationAvailable: Boolean = false,
     /** 이 설정으로 차가 처음 할 말(미리 보기). */
     val preview: String = "",
+    /** 직접 쓴 화제 전환 한마디가 엔진 검사(금지어·길이 등)를 통과하지 못한 까닭. 문제가 없으면 null */
+    val customLineProblem: String? = null,
 )
 
 /**
@@ -131,7 +137,7 @@ fun SetupScreen(
                     Modifier.weight(1.25f).fillMaxHeight().verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(18.dp),
                 ) {
-                    WhoWherePanel(ui.form, onForm)
+                    WhoWherePanel(ui, onForm)
                     DriverSeatPanel(ui, onForm)
                 }
             }
@@ -143,7 +149,7 @@ fun SetupScreen(
                 ) {
                     Text(stringResource(R.string.setup_title), style = AppType.title, color = colors.text)
                     RoutesPanel(ui, onForm, onStartRoute, onDeleteRoute)
-                    WhoWherePanel(ui.form, onForm)
+                    WhoWherePanel(ui, onForm)
                     DriverSeatPanel(ui, onForm)
                 }
                 StartBlock(ui, onStart)
@@ -194,7 +200,8 @@ private fun RoutesPanel(
 
 /** 누구를 어디로: 호칭, 가는 곳, 가서 할 일. */
 @Composable
-private fun WhoWherePanel(form: SetupForm, onForm: (SetupForm) -> Unit) {
+private fun WhoWherePanel(ui: SetupUi, onForm: (SetupForm) -> Unit) {
+    val form = ui.form
     Panel {
         SectionTitle(stringResource(R.string.setup_honorific))
         ChipRow {
@@ -218,6 +225,20 @@ private fun WhoWherePanel(form: SetupForm, onForm: (SetupForm) -> Unit) {
         }
         if (form.purpose == Purpose.CUSTOM) {
             Field(form.customPurposeLine, { onForm(form.copy(customPurposeLine = it.take(24))) }, stringResource(R.string.setup_purpose_hint))
+            // 입력할 때 엔진 검사(금지어·길이)로 바로 알려 준다. 통과하지 못한 한마디는 엔진이 읽지 않는다.
+            ui.customLineProblem?.let { problem ->
+                val colors = LocalAppColors.current
+                Box(
+                    Modifier
+                        .widthIn(max = 720.dp)
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(colors.alert)
+                        .padding(horizontal = 18.dp, vertical = 12.dp),
+                ) {
+                    Text(problem, style = AppType.small, color = colors.onAlert)
+                }
+            }
         }
     }
 }

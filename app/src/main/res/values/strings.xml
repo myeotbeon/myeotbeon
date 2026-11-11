@@ -59,6 +59,15 @@
     <string name="setup_place_hint">부르기 쉬운 이름(예: 큰딸 집)</string>
     <string name="setup_purpose">가서 할 일</string>
     <string name="setup_purpose_hint">한마디로 적어 주세요(예: 가서 손주 얼굴 봐요)</string>
+    <!-- 직접 쓴 한마디가 대본의 말 원칙을 지키지 않을 때(엔진 검사) -->
+    <string name="custom_line_problem">이대로면 이 한마디는 읽지 않아요. %1$s</string>
+    <string name="custom_line_sentences">한 문장으로 적어 주세요.</string>
+    <string name="custom_line_too_long">한 문장이 %1$d음절이에요. %2$d음절 안으로 줄여 주세요.</string>
+    <string name="custom_line_forbidden">‘%1$s’ 같은 말은 빼 주세요. 고치거나 따지는 말로 들릴 수 있어요.</string>
+    <string name="custom_line_unsafe">‘%1$s’처럼 몸을 밖으로 내밀게 할 수 있는 말은 빼 주세요.</string>
+    <string name="custom_line_dignity">병을 가리키는 말은 쓰지 않아요.</string>
+    <string name="custom_line_braces">{ } 기호는 쓸 수 없어요.</string>
+    <string name="custom_line_other">대본의 말 원칙에 맞게 고쳐 주세요.</string>
     <string name="purpose_clinic">진료</string>
     <string name="purpose_meal">식사</string>
     <string name="purpose_family">가족 만나기</string>
