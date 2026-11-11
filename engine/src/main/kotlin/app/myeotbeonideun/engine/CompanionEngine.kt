@@ -618,7 +618,10 @@ class CompanionEngine(
                             now, out,
                         )
                     }
-                } else if (now - (awayNoticeAt ?: now) >= params.driverAwayRepeatMs) {
+                } else if (passengerSeat.value != false && now - (awayNoticeAt ?: now) >= params.driverAwayRepeatMs) {
+                    // 기다리는 동안 짧게 다시 안심시킨다. 동승자 자리가 비어 있으면 하지 않는다 — 운전자와 함께 내렸으면
+                    // 빈 차에 말하게 되고, 그 말이 '차가 대신 말한 횟수'를 부풀린다. 이탈 상태는 그대로 두어
+                    // 돌아온 운전자에게 알릴 일(자리 비움)은 남기고, 동승자가 다시 앉으면 간격이 지났을 때 다시 안심시킨다.
                     awayNoticeAt = now
                     awayAnnounced = true
                     offer(stopCandidate("driver_away_again", now, StopReason.DRIVER_AWAY, ignoreQuiet = true), now, out)

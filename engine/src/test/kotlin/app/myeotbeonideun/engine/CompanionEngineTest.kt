@@ -855,7 +855,8 @@ class CompanionEngineTest {
         assertEquals("driver_away_again", rig.spoken().single().situation)
         assertTrue("'잠깐 쉬었다 가요' 같은 정차 안내로 넘어가지 않는다", rig.spoken().none { it.situation.startsWith("stop_") })
         rig.advance(80)
-        assertEquals("운전자를 기다리는 말은 이어 간다", 2, rig.spoken("driver_away_again").size)
+        assertEquals("자리가 빈 동안에는 75초마다 하는 안심 말을 빈 자리에 하지 않는다", 1, rig.spoken("driver_away_again").size)
+        assertEquals("운전자가 돌아올 때까지 이탈로 본다", StopReason.DRIVER_AWAY, rig.snapshot().stopReason)
 
         rig.set { copy(driverSeatOccupied = true) } // 운전자가 돌아온다
         rig.advance(3)
@@ -863,6 +864,35 @@ class CompanionEngineTest {
         assertTrue(rig.snapshot().driverNoticeUrgent)
         rig.advance(10)
         assertTrue("동승자가 자리에 없으면 돌아왔다는 말을 하지 않는다", rig.spoken("driver_back").isEmpty())
+    }
+
+    @Test
+    fun `운전자와 동승자가 함께 내린 빈 차에는 되풀이해 말하지 않고 차가 대신 말한 횟수도 늘지 않는다`() {
+        // 병원 앞에 세우고 운전자가 먼저 내린 뒤 어르신을 모시고 함께 들어간 경우
+        val rig = Rig()
+        rig.startAndDepart()
+        rig.set { copy(gear = Gear.PARK) }
+        rig.set { copy(driverDoorOpen = true, driverSeatOccupied = false) }
+        rig.advance(13)
+        assertEquals(1, rig.spoken("driver_away").size)
+        rig.set { copy(seatDoorOpen = true) } // 운전자가 뒷문을 열어 드림(앱은 누가 열었는지 모른다)
+        rig.advance(15)
+        rig.set { copy(seatOccupied = false) }
+        rig.advance(15)
+        rig.set { copy(seatDoorOpen = false) }
+        val before = rig.snapshot().counts
+        val saidBefore = rig.spoken().size
+        rig.advance(60 * 60) // 한 시간 동안 빈 차
+        assertEquals("빈 차에는 아무 말도 하지 않는다", saidBefore, rig.spoken().size)
+        assertEquals("차가 대신 말한 횟수가 늘지 않는다", before.spokenOnBehalf, rig.snapshot().counts.spokenOnBehalf)
+        assertEquals(before, rig.snapshot().counts)
+        assertEquals("돌아온 운전자에게 알릴 일을 남기려고 이탈 상태는 그대로 둔다", StopReason.DRIVER_AWAY, rig.snapshot().stopReason)
+
+        // 어르신이 먼저 돌아와 앉으면(운전자는 아직 밖) 다시 안심시킨다
+        rig.set { copy(seatOccupied = true) }
+        rig.advance(3)
+        assertEquals("driver_away_again", rig.spoken().last().situation)
+        assertEquals(saidBefore + 1, rig.spoken().size)
     }
 
     @Test
