@@ -28,6 +28,7 @@ import org.robolectric.annotation.GraphicsMode
  * 운전자 화면은 글 세 줄 이하와 큰 버튼 둘, 스크롤 없음. 동승자 카드는 큰 글자 두 줄.
  *
  * 줄 수는 실제로 그려진 글의 줄 수다. 나란히 놓인 글(가는 곳 · 구간)은 한 줄로 센다.
+ * 여기서는 동행 화면만 그린다. 화면 틀(메뉴 5칸)까지 그려 메뉴를 따로 세는 시험은 [ShellLayoutTest].
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
