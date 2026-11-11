@@ -300,7 +300,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app), DevPanelActions {
 
     fun onSpeedPermissionResult(granted: Boolean) {
         _speedGranted.value = granted
-        if (granted) c.restartVehicleSource()
+        // 구독 전체를 놓았다 붙이지 않고 속도 신호만 다시 붙인다(동행 중의 좌석·문 값이 끊기지 않게).
+        if (granted) c.vehicleSource.refreshSpeedPermission()
     }
 
     private fun checkSpeedPermission(): Boolean = runCatching {

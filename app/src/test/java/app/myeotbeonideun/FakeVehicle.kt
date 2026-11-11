@@ -44,6 +44,13 @@ open class FakeVehicleSource : VehicleSignalSource {
     override fun setTripActive(active: Boolean) {
         tripActive = active
     }
+
+    var speedRefreshes = 0
+        private set
+
+    override fun refreshSpeedPermission() {
+        speedRefreshes++
+    }
 }
 
 /** 차량용 기기처럼 도는 앱(시험용). 실차 신호는 [FakeVehicleSource]. */

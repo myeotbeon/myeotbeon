@@ -83,4 +83,7 @@ interface SignalSource {
 interface VehicleSignalSource : SignalSource {
     /** 연결 과정에서 있었던 일(개발자 패널에 보인다). 개인정보는 넣지 않는다. */
     val diagnostics: StateFlow<List<String>>
+
+    /** 속도 권한을 새로 받았다. 속도 신호만 다시 붙인다(다른 신호와 동행 중의 값은 그대로). */
+    fun refreshSpeedPermission()
 }

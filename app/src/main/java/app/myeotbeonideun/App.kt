@@ -19,9 +19,11 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 
 open class App : Application() {
     lateinit var container: AppContainer
@@ -92,18 +94,33 @@ class AppContainer(
     fun isDrivingRestrictedNow(): Boolean =
         DrivingLock.screenRestricted(source.value.state.value, vehicleSource.state.value.takeIf { isAutomotive })
 
+    private val foregroundTracker = ForegroundTracker().also { app.registerActivityLifecycleCallbacks(it) }
+
+    /** 앱 화면이 보이는지(ProcessLifecycle 의 onStart/onStop 과 같은 뜻). */
+    val foreground: StateFlow<Boolean> = foregroundTracker.foreground
+
     val trip = TripController(app, this)
 
     init {
         demoSource.start()
-        if (isAutomotive) vehicleSource.start()
+        // 차량 신호 구독은 '화면이 보이거나 동행 중'일 때만 둔다. 백그라운드에서 동행이 없으면 놓는다
+        // (Pleos 가이드: 백그라운드의 불필요한 센서 수집 정리).
+        scope.launch { foreground.collect { syncVehicleSubscription() } }
+        scope.launch { trip.ui.map { it != null }.distinctUntilChanged().collect { syncVehicleSubscription() } }
     }
 
-    /** 속도 권한을 새로 허용받았을 때 등, 차량 신호를 다시 붙인다. */
-    fun restartVehicleSource() {
-        if (!isAutomotive) return
-        vehicleSource.stop()
-        vehicleSource.start()
+    /** 지금 차량 신호 구독이 필요한지 보고 붙이거나 놓는다. 여러 번 불러도 된다. */
+    fun syncVehicleSubscription() {
+        if (DrivingLock.shouldSubscribe(isAutomotive, foreground.value, trip.inProgress)) vehicleSource.start()
+        else vehicleSource.stop()
+    }
+
+    /**
+     * 화면 밖(Gleo 의 "동행 시작" 등)에서 주행 여부를 봐야 할 때, 차량 신호를 먼저 붙인다.
+     * 주행 규제(CarUxRestrictions)는 붙이는 순간 지금 값을 읽는다. 쓸 일이 없으면 다음 [syncVehicleSubscription] 이 놓는다.
+     */
+    fun ensureVehicleSignals() {
+        if (isAutomotive) vehicleSource.start()
     }
 
     companion object {

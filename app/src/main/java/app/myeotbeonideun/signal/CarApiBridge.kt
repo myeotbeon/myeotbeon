@@ -56,10 +56,14 @@ internal class CarApiBridge(
         }
     }
 
-    fun start() {
+    /**
+     * Car 서비스에 붙고 주행 규제·변속단·속도를 등록한다. 주행 규제는 지금 값을 바로 읽어 넘긴다.
+     * @return Car 서비스에 붙었으면 true. false 면 부르는 쪽이 나중에 다시 시도한다(부팅 직후 등)
+     */
+    fun start(): Boolean {
         val c = Car.createCar(context) ?: run {
             note("Car 서비스에 연결하지 못했습니다")
-            return
+            return false
         }
         car = c
 
@@ -70,7 +74,7 @@ internal class CarApiBridge(
             hasUx = true
         }
 
-        val pm = c.getCarManager(Car.PROPERTY_SERVICE) as? CarPropertyManager ?: return
+        val pm = c.getCarManager(Car.PROPERTY_SERVICE) as? CarPropertyManager ?: return true
         properties = pm
         if (granted(Car.PERMISSION_POWERTRAIN) && pm.getCarPropertyConfig(VehiclePropertyIds.GEAR_SELECTION) != null) {
             hasGear = pm.registerCallback(
@@ -85,6 +89,7 @@ internal class CarApiBridge(
                 propertyCallback, VehiclePropertyIds.PERF_VEHICLE_SPEED, CarPropertyManager.SENSOR_RATE_NORMAL,
             )
         }
+        return true
     }
 
     fun stop() {
