@@ -138,6 +138,12 @@ class TripController(private val context: Context, private val c: AppContainer) 
         c.speech.setAudioZone(settings.audioZoneId)
         perform(e.start(now()))
 
+        // 음성 인식(실험 기능)은 '말하는 중' 수집보다 먼저 시작한다(결함 9). 수집은 지금 값(소개말을 말하는 중)을 바로
+        // 받아 pause 를 부르는데, 그때 듣기가 시작되지 않은 상태면 pause 가 무시되어 소개말 동안 듣게 된다.
+        if (settings.listenEnabled) {
+            c.listener.start { intent -> engine?.let { perform(it.onPassengerAsked(intent, now())) } }
+        }
+
         job = c.scope.launch {
             launch {
                 src.state.collect { vehicle -> perform(e.onSignals(vehicle.forSeat(config.seat), now())) }
@@ -166,9 +172,6 @@ class TripController(private val context: Context, private val c: AppContainer) 
                     if (speaking) c.listener.pause() else c.listener.resume()
                 }
             }
-        }
-        if (settings.listenEnabled) {
-            c.listener.start { intent -> engine?.let { perform(it.onPassengerAsked(intent, now())) } }
         }
         CompanionService.start(context)
     }

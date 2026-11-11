@@ -36,6 +36,54 @@ class IntentMatcherTest {
         assertNull(IntentMatcher.match("오늘 날씨 좋다"))
         assertNull(IntentMatcher.match("   "))
     }
+
+    @Test
+    fun `동승자가 흔히 묻는 꼴은 그대로 알아듣는다`() {
+        val cases = mapOf(
+            "여기가 어디야?" to PassengerIntent.WHERE,
+            "여기 어디야" to PassengerIntent.WHERE,
+            "우리 어딜 가는 거니" to PassengerIntent.WHERE,
+            "얼마나 남았어?" to PassengerIntent.WHEN,
+            "얼마나 걸려" to PassengerIntent.WHEN,
+            "언제 다 와?" to PassengerIntent.WHEN,
+            "아직 멀었어?" to PassengerIntent.WHEN,
+            "몇 분 남았니" to PassengerIntent.WHEN,
+            "왜 서?" to PassengerIntent.WHY_STOPPED,
+            "왜 서 있어" to PassengerIntent.WHY_STOPPED,
+            "왜 멈췄어" to PassengerIntent.WHY_STOPPED,
+            "내려도 돼?" to PassengerIntent.ARRIVED_Q,
+            "이제 내려?" to PassengerIntent.ARRIVED_Q,
+            "집에 가고 싶어" to PassengerIntent.GO_HOME,
+            "집에 언제 가" to PassengerIntent.GO_HOME,
+            "집에 가야 돼" to PassengerIntent.GO_HOME,
+        )
+        for ((said, intent) in cases) assertEquals(said, intent, IntentMatcher.match(said))
+    }
+
+    @Test
+    fun `어디·언제·얼마나 낱말 하나만으로는 대답하지 않는다(운전자 통화·라디오·노래)`() {
+        val notQuestions = listOf(
+            // 운전자 통화
+            "너 지금 어디야",
+            "엄마 언제 와",
+            "그럼 언제 시간 돼?",
+            "회의 언제야",
+            "그거 얼마야",
+            "나 오늘 회사 안 가고 집에 있어",
+            "지금 집에 가는 중이야",
+            "얼마나 걸렸어? 오래 있었어?",
+            "그 사람 어디 사람이야",
+            // 라디오·노래
+            "언제나 너를 사랑해",
+            "어디서든 너를 찾을게",
+            "얼마나 좋을까",
+            "얼마나 사랑했는지",
+            "내일은 전국에 비가 내려도 오후에는 그칩니다",
+            "다음 소식입니다",
+            "왜 서운해 하는지 몰라",
+        )
+        for (said in notQuestions) assertNull(said, IntentMatcher.match(said))
+    }
 }
 
 class RecordAggregatorTest {

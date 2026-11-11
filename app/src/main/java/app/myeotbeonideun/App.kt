@@ -47,6 +47,7 @@ open class App : Application() {
  * @param vehicleSource 실차 신호(시험에서는 가짜)
  * @param speakers 음성 엔진(시험에서는 가짜). null 이면 Pleos TTS → 안드로이드 TTS
  * @param activeUsages 지금 재생 중인 소리의 용도(시험에서는 가짜). null 이면 AudioManager 에서 읽는다
+ * @param listener 음성 인식(실험 기능, 시험에서는 가짜)
  */
 class AppContainer(
     private val app: Application,
@@ -54,6 +55,7 @@ class AppContainer(
     val vehicleSource: VehicleSignalSource = PleosSignalSource(app),
     speakers: List<Speaker>? = null,
     activeUsages: (() -> List<Int>)? = null,
+    val listener: PassengerListener = PleosPassengerListener(app),
 ) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
@@ -62,7 +64,6 @@ class AppContainer(
     val speech =
         if (speakers != null) SpeechController(app, scope, speakers, activeUsages)
         else SpeechController(app, scope, activeUsages = activeUsages)
-    val listener: PassengerListener = PleosPassengerListener(app)
 
     /** 미리 써 둔 고정 대본. 실행 중에 문장을 만들지 않는다. */
     val script: ScriptBook by lazy {

@@ -8,6 +8,7 @@ import ai.pleos.playground.stt.listener.ResultListener
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import app.myeotbeonideun.engine.intent.IntentMatcher
 import app.myeotbeonideun.engine.intent.PassengerIntent
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -38,6 +39,12 @@ interface PassengerListener {
  *
  * 사생활: 인식 문장은 [IntentMatcher] 에 넘겨 물음의 종류(다섯 가지 중 하나)만 얻고 곧바로 버린다.
  * 문장도 음성도 저장하지 않고, 로그에도 남기지 않는다.
+ *
+ * 버티기(결함 9, 규칙은 [ListenPolicy]): 인식이 정상으로 끝날 때마다 오류 횟수를 0 으로, 시간 초과(말 없음)는 오류로
+ * 세지 않는다. 같은 물음 종류는 18초 안에 다시 대답하지 않는다. 다음 인식 요청은 하나만 걸어 둔다(끝남·오류가 함께
+ * 와도 두 번 부르지 않게).
+ * 확인하지 못한 것(에뮬레이터 실측 필요): request() 를 0.6초마다 다시 부를 때 시작음이 나는지, 오디오 포커스를 잡는지,
+ * onError 뒤에 onEndedRecognition 이 오는지.
  */
 class PleosPassengerListener(context: Context) : PassengerListener {
     private val appContext = context.applicationContext
@@ -49,24 +56,36 @@ class PleosPassengerListener(context: Context) : PassengerListener {
     private var onIntent: ((PassengerIntent) -> Unit)? = null
     private var running = false
     private var paused = false
-    private var errors = 0
+    private val policy = ListenPolicy()
 
     private val request = Runnable {
         if (running && !paused) runCatching { stt?.request() }.onFailure { giveUp() }
     }
 
+    /** 다음 인식 요청을 하나만 걸어 둔다. */
+    private fun scheduleRequest(delayMs: Long) {
+        main.removeCallbacks(request)
+        main.postDelayed(request, delayMs)
+    }
+
     private val listener = object : ResultListener {
         override fun onReady() {}
         override fun onStartedRecognition() {
-            main.post { if (running) _state.value = ListenState.LISTENING }
+            main.post {
+                if (!running) return@post
+                policy.onRecognitionStarted()
+                _state.value = ListenState.LISTENING
+            }
         }
 
         override fun onUpdated(stt: String, completed: Boolean) {
             if (!completed) return
-            val intent = IntentMatcher.match(stt) ?: return // 문장은 여기서 버린다
+            val intent = IntentMatcher.match(stt) // 문장은 여기서 버린다
             main.post {
-                errors = 0
-                if (running && !paused) onIntent?.invoke(intent)
+                if (!running) return@post
+                // 완성된 결과가 왔다 = 정상 종료(오류 횟수 0). 같은 물음을 쿨다운 안에 또 들었으면 대답하지 않는다.
+                val accepted = policy.onResult(intent, SystemClock.elapsedRealtime())
+                if (accepted != null && !paused) onIntent?.invoke(accepted)
             }
         }
 
@@ -74,13 +93,21 @@ class PleosPassengerListener(context: Context) : PassengerListener {
         override fun onUpdatedRms(rms: Double) {}
 
         override fun onEndedRecognition() {
-            main.postDelayed(request, RESTART_MS)
+            main.post {
+                if (!running) return@post
+                policy.onEnded()
+                if (!paused) scheduleRequest(RESTART_MS)
+            }
         }
 
         override fun onError(errorType: ErrorType) {
+            val error = ListenError.of(errorType.name)
             main.post {
                 if (!running) return@post
-                if (++errors >= MAX_ERRORS) giveUp() else main.postDelayed(request, RETRY_MS)
+                when {
+                    policy.onError(error) -> giveUp()
+                    !paused -> scheduleRequest(if (error == ListenError.NO_SPEECH) RESTART_MS else RETRY_MS)
+                }
             }
         }
     }
@@ -90,7 +117,7 @@ class PleosPassengerListener(context: Context) : PassengerListener {
         this.onIntent = onIntent
         running = true
         paused = false
-        errors = 0
+        policy.reset()
         _state.value = ListenState.STARTING
         try {
             val engine = SpeechToText(appContext, Mode.ON_DEVICE)
@@ -103,7 +130,7 @@ class PleosPassengerListener(context: Context) : PassengerListener {
                             engine.setLocale(Locale.KOREA)
                             engine.addListener(listener)
                         }.onFailure { giveUp() }
-                        main.post(request)
+                        scheduleRequest(0)
                     }
                 }
 
@@ -126,7 +153,7 @@ class PleosPassengerListener(context: Context) : PassengerListener {
     override fun resume() {
         if (!running || !paused) return
         paused = false
-        main.postDelayed(request, RESTART_MS)
+        scheduleRequest(RESTART_MS)
     }
 
     override fun stop() {
@@ -155,6 +182,5 @@ class PleosPassengerListener(context: Context) : PassengerListener {
     private companion object {
         const val RESTART_MS = 600L
         const val RETRY_MS = 2_000L
-        const val MAX_ERRORS = 3
     }
 }
