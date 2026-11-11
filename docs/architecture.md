@@ -10,7 +10,7 @@
 │ FusedLocation│   │  └ DemoSignalSource  │   │  신호 반응 · 우선순위   │   │  오디오 포커스       │
 │ AAOS Car API │   │   (체험 모드)         │   │  대본 엔진(고정 문장)   │   ├────────────────────┤
 └──────────────┘   └──────────────────────┘   └──────────────────────┘   │ Compose 화면        │
-                          VehicleState               EngineAction         │ (주행 중 3줄 + 버튼2)│
+                          VehicleState               EngineAction         │ (본문 3줄 + 버튼2)   │
                                                      EngineSnapshot       └────────────────────┘
                                    ▲                        ▲
                                    └──── TripController ────┘  (동행 한 번을 이끈다, 1초마다 onTick)
@@ -19,6 +19,7 @@
 - `engine/` 은 안드로이드에 의존하지 않는 별도 Gradle 모듈입니다(Kotlin JVM). 안드로이드 클래스를 쓰면 컴파일되지 않습니다.
 - 엔진은 시계를 갖지 않습니다. 모든 함수가 `nowMs` 를 받으므로, 같은 신호를 같은 순서로 넣으면 같은 말이 나옵니다(테스트로 확인).
 - 신호 출처는 인터페이스 하나(`SignalSource`)이고 구현이 둘입니다. 체험 모드는 출처만 바꾼 것이라 엔진·음성·화면·저장은 같은 코드입니다.
+- 그림의 '본문 3줄 + 버튼2'는 동행 화면 본문의 약속입니다. 화면 틀의 메뉴 5칸은 주행 중에도 함께 보이고 따로 셉니다(아래 '화면과 주행 규제').
 
 ## 모듈과 패키지
 
@@ -26,16 +27,17 @@
 |---|---|
 | `engine/…/model` | `VehicleState`(차에서 읽은 값), `Signals`(동승 좌석 기준으로 뽑은 값), `TripConfig`(출발 전 설정) |
 | `engine/…/journey` | `StageCalculator`(구간), `IntervalPolicy`(먼저 말해 주기 간격) |
-| `engine/…/stop` | `StopClassifier`(멈춤 이유) |
+| `engine/…/stop` | `StopClassifier`(멈춤 이유), `Debounced`(좌석 점유 흔들림 완충) |
 | `engine/…/script` | `ScriptBook`(대본 읽기), `ScriptEngine`(변형 순환·빈칸 채우기), `Josa`(조사), `ScriptValidator`(대본 검사기), `MiniJson` |
 | `engine/…/intent` | `IntentMatcher`(다섯 가지 물음) |
 | `engine/…/record` | `TripCounts`, `RecordAggregator` |
 | `engine/…/CompanionEngine.kt` | 위의 것을 묶어 "지금 누구에게 무슨 말을 할지" 정함 |
-| `app/…/signal` | `SignalSource`, `PleosSignalSource`, `CarApiBridge`, `DemoSignalSource` |
-| `app/…/speech` | `Speaker`(Pleos·안드로이드), `SpeechController`, `PassengerListener`(음성 인식) |
+| `app/…/signal` | `SignalSource`, `PleosSignalSource`, `CarApiBridge`, `DemoSignalSource`, `DrivingLock`(화면 잠금·구독 규칙), `SeatReading`(좌석 점유 값 해석), `SignalSession`(구독 한 번의 장부·다시 시도·지원 영역) |
+| `app/…/speech` | `Speaker`(Pleos·안드로이드), `SpeechController`, `SpeechResult`·`AudioYield`(말마다 결과, 내비 안내·통화 양보), `PassengerListener`·`ListenPolicy`(음성 인식) |
 | `app/…/data` | `AppStore`(SharedPreferences) |
-| `app/…/service` | `TripController`, `CompanionService`(포그라운드 서비스) |
-| `app/…/gleo` | Gleo 함수 수신·응답 |
+| `app/…/service` | `TripController`, `CompanionService`(포그라운드 서비스), `TripNotifications`(진행 중 알림·급한 알림) |
+| `app/…/gleo` | Gleo 함수 수신·응답, `CallLimiter`·`GleoLimits`(연속 호출 제한) |
+| `app/…` | `App`(`AppContainer`: 신호 출처 고르기, 구독 수명), `ForegroundTracker`(앱이 보이는지) |
 | `app/…/ui` | `MainActivity`, `AppViewModel`, `AppShell`, 화면 6개 |
 
 ## 엔진의 판단
@@ -166,32 +168,64 @@
 
 | 화면 | 주행 중 | 내용 |
 |---|---|---|
-| 동행 중 | 열림 | 글 세 줄(누구·어느 자리 / 어디·어느 구간 / 마지막 안내) + 큰 버튼 둘 |
+| 동행 중 | 열림 | 본문 글 세 줄(누구·어느 자리 / 어디·어느 구간 / 마지막 안내) + 큰 버튼 둘(`다시 말씀드리기`, `잠시 조용히`). 정차 중에만 아래 줄에 `도착했어요`(출발 뒤·도착 전)와 `동행 끝내기`가 더해짐 |
 | 동승자 카드 | 열림 | 큰 글자 두 줄 |
-| 출발 전 설정, 오늘의 기록, 환경설정 | **잠김** | 주행 규제(`CarUxRestrictions`) 중에는 잠금 안내만 보임 |
+| 출발 전 설정, 오늘의 기록, 환경설정, 개발자 패널 | **잠김** | 주행 규제 중에는 잠금 안내(글 두 줄·버튼 하나)만 보임 |
 
-- 주행 중 화면에는 스크롤·움직이는 그림·긴 글·글자 입력이 없습니다. `동행 끝내기`도 정차 중에만 보입니다.
+- 주행 규제 = `CarUxRestrictions`, 그 값이 없으면 변속단이 P 가 아닌지(둘 다 모르면 잠그지 않음, `DrivingLock`).
+  화면 잠금은 지금 신호 출처의 규제 OR 실차의 규제입니다. 체험 모드를 켜고 실제로 달려도 실차 값으로 잠깁니다
+  (체험 모드의 개발자 패널만은 모의 주행으로는 잠그지 않습니다 — 신호를 흉내 내는 도구라서).
+- 화면 틀의 메뉴 5칸(출발·동행·카드·기록·설정)은 주행 중에도 함께 보입니다. '글 세 줄·버튼 둘'은 본문에 대한 약속이고 메뉴는 따로 셉니다.
+  `ShellLayoutTest` 가 화면 틀까지 그려 셉니다: 본문 글 3줄, 본문 큰 버튼 2개, 메뉴 탭 5개(칸마다 짧은 글 한 줄), 누를 것 모두 7개,
+  스크롤 0 — 가로 창과 세로 창(아래 메뉴) 모두. 급한 알림이 떠도 본문 글은 3줄 이하입니다.
+- 첫째 줄 자리에는 앱 상태 한 줄이 대신 올 수 있습니다: "음성 엔진이 없어 화면으로만 알려요", "차량 신호가 없어 먼저 말하지 않아요",
+  마지막 말을 소리 내지 못한 까닭("내비 안내 중이라 / 통화 중이라 / 다른 소리가 나는 중이라 소리 내지 않았어요"), "도착 안내가 끝나면 동행을 마쳐요".
+  셋째 줄에는 하려던 말이 그대로 남습니다.
+- 운전자 알림 한 줄(붉은 급한 알림 포함)은 셋째 줄 자리에 보입니다. 앱이 화면 뒤에 있으면(내비가 앞) 급한 알림만 안드로이드 알림(헤드업, 채널 소리 끔)으로
+  한 번 띄우고, 진행 중 알림의 글도 그 한 줄로 바꿉니다(`TripNotifications`). 같은 일의 되풀이 안내로는 다시 띄우지 않습니다.
+- 주행 중 화면에는 스크롤·움직이는 그림·긴 글·글자 입력이 없습니다. `도착했어요`·`동행 끝내기`도 정차 중에만 보입니다.
+- 처음 실행 안내(정차 중에만): 안전·개인정보 안내, 차량용 기기에서 속도 권한이 없으면 속도 신호 허용을 한 번 권함(허용 창이 '위치 정보'로 뜬다는 것을 미리 말함).
 - 넓은 창(가로)과 좁은 창(세로) 모두에 맞춥니다: 900dp 이상이면 왼쪽 메뉴, 아니면 아래 메뉴.
 - 색은 밤·낮 두 벌이고, 글자 대비 4.5:1 이상을 단위 테스트로 검사합니다. 가장 작은 글자가 22sp 입니다.
 - 버튼은 누르면 95% 로 줄고 바탕색이 바뀝니다.
 
+## 차량 신호 연결(`AppContainer`, `PleosSignalSource`)
+
+- 신호 출처: 차량용 기기면 실차 신호(`PleosSignalSource`), 환경설정에서 체험 모드를 켰을 때만 모의 신호. 차량용이 아닌 기기는 체험 모드로만 돕니다.
+  차량용 기기에서 신호를 하나도 얻지 못하면 체험 모드로 넘어가지 않고 '차량 신호 없음'으로 돌며(환경설정과 동행 화면 첫째 줄에 알림),
+  그때 엔진은 출발을 알 수 없어 먼저 말하지 않고 '다시 말씀드리기'에만 어디 가는지 대답합니다.
+- 구독 수명: 화면이 보이거나 동행 중일 때만 구독합니다(`DrivingLock.shouldSubscribe`). 마지막 화면이 멈추고 1초 뒤 동행이 없으면 놓고,
+  다시 보이면 붙입니다. 화면 없이 Gleo 로 시작한 동행도 붙입니다. 놓을 때는 리스너를 바로 풀고 SDK 는 기다리던 콜백이 돌아온 뒤에 놓습니다.
+- 다시 시도 2·4·8초(세 번), 지원 영역에 든 자리만 등록, 속도 권한을 새로 받으면 Car API 만 다시 붙임(동행 중 좌석·문 값이 끊기지 않게).
+- 좌석 점유 값 해석(`SeatValueReader`): 자동은 출발 전 설정(P단)과 동행 시작 순간의 운전석 값으로 그대로·반대로를 정하고 동행 중에는 바꾸지 않습니다.
+  자세한 것은 `docs/signals.md` 1절.
+
 ## 동행 한 번의 흐름(`TripController`)
 
-1. `start(config)` — 설정을 '자주 가는 길'로 저장, 엔진을 만들고 소개말, 포그라운드 서비스 시작.
+1. `start(config)` — 설정을 '자주 가는 길'로 저장, 엔진을 만들고 소개말, 포그라운드 서비스 시작. '물으면 대답하기'가 켜져 있으면
+   음성 인식을 '말하는 중' 수집보다 먼저 시작해, 소개말을 말하는 동안 듣기가 멈춰 있게 합니다.
 2. 신호가 바뀔 때마다 `engine.onSignals`, 1초마다 `engine.onTick`. 엔진이 돌려준 `EngineAction` 을 음성·알림음으로 옮기고 `EngineSnapshot` 을 화면에 냅니다.
-   말마다 실제로 소리 냈는지를 `engine.onUtteranceResult` 로 돌려줍니다.
-3. `end()` — 엔진에서 횟수 기록을 받아 저장, 서비스 종료. 도착(`Arrived`)한 뒤 10분이 지나도 끝내지 않으면 스스로 끝냅니다.
-   도착을 거두면(`ArrivalCancelled`) 그 예약도 풉니다. 도착 지점 기억은 `Arrived` 때 합니다.
+   말마다 실제로 소리 냈는지(`SpeechResult`)를 `engine.onUtteranceResult` 로 돌려줍니다. 급한 운전자 알림은 진행 중 알림과 헤드업으로도 옮깁니다.
+3. `confirmArrival()` — 운전자가 `도착했어요`(또는 Gleo `REPEAT_TRIP_ANSWER` 의 `arrived: true`)를 누르면, 주행 중이 아니고 엔진이 받을 수 있을 때만
+   `engine.driverConfirmedArrival` 을 부릅니다. 도착 안내(`arrive`)의 결과가 오면(소리 내지 못했어도) 다음 1초 틱에 동행을 마치고, 30초 안에 오지 않아도 마칩니다.
+4. `end()` — 엔진에서 횟수 기록을 받아 저장, 서비스 종료. 도착(`Arrived`)한 뒤 10분이 지나도 끝내지 않으면 스스로 끝냅니다.
+   도착을 거두면(`ArrivalCancelled`) 그 예약도 풉니다. 도착 지점 기억은 `Arrived` 때 합니다(운전자가 알린 도착은 그때 위치로 새로,
+   차가 본 도착은 저장된 지점이 없을 때만, 도착을 거두면 그 도착에서 저장한 지점을 되돌림).
 
-포그라운드 서비스는 동행 중에만 떠 있습니다. 부팅 때 스스로 시작하지 않고, 차량 신호는 폴링이 아니라 리스너로 받습니다
-(예외: 내비의 남은 시간은 콜백으로만 와서, 동행 중에만 30초마다 다시 묻습니다).
+포그라운드 서비스는 동행 중에만 떠 있고 부팅 때 스스로 시작하지 않습니다. 차량 신호는 리스너로 받습니다. 주기적으로 묻는 것은
+동행 중 내비 정보(남은 시간은 콜백으로만 와서 30초마다 다시 물음) 하나이고, 엔진은 1초 타이머(`onTick`)로 시간을 셉니다.
 
 ## 테스트
 
 | 종류 | 위치 | 수 |
 |---|---|---|
-| 엔진 단위 테스트(JVM) | `engine/src/test` | 155 |
-| 앱 단위 테스트(JVM, 일부 Robolectric) | `app/src/test` | 51 |
-| 화면 그림(Roborazzi) | `app/src/test/…/ScreenshotTest.kt` → `docs/screens` | 17장 |
+| 엔진 단위 테스트(JVM) | `engine/src/test` | 158 |
+| 앱 단위 테스트(JVM, 일부 Robolectric) | `app/src/test` | 188 |
+| 화면 그림(Roborazzi, 앱 단위 테스트에 포함) | `app/src/test/…/ScreenshotTest.kt` → `docs/screens` | 18장 |
 
-`AppFlowTest` 는 실제 `Application` 을 띄워 체험 모드 신호로 출발~신호 대기~도착~기록 저장까지를 한 번에 돌립니다.
+- `AppFlowTest` 는 실제 `Application` 을 띄워 체험 모드 신호로 출발~신호 대기~도착~기록 저장까지를 한 번에 돌립니다.
+- 차량용 기기 흐름은 가짜 실차 신호(`FakeVehicleSource`)를 넣은 앱으로 시험합니다: 신호 출처 고르기, 화면 잠금, 구독 수명, 좌석 값 해석, 속도 권한 권유,
+  Gleo 동행 시작 거절. `SpeechFlowTest`·`ArrivalConfirmTest` 는 가짜 음성 엔진으로 소리 낸 말만 세는지와 '도착했어요'를 봅니다.
+- `PleosSignalSource`·`CarApiBridge` 의 SDK 호출부와 실제 음성 재생·인식은 JVM 시험이 없습니다(SDK 런타임 없음). 판단 규칙은 순수 Kotlin 으로 빼서 시험하고,
+  SDK 호출부는 Pleos Connect 에뮬레이터에서 확인합니다(README '테스트 환경').
+- 문서의 수치(시험 수, 대본 상황·줄 수)와 고친 옛 주장이 남아 있지 않은지는 `DocsFactsTest` 가, 개인정보 문서와 실제 저장 항목은 `PrivacyWordingTest` 가 견줍니다.
