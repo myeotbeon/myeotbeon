@@ -74,6 +74,10 @@ data class EngineParams(
     val pendingTtlMs: Long = 20_000,
     /** 운전자 화면의 알림 한 줄을 지우는 시간(긴급하지 않은 것). */
     val noticeHoldMs: Long = 15_000,
+    /** 내비 남은 시간으로 정한 구간은 같은 구간이 이만큼 이어지거나 … */
+    val stageConfirmMs: Long = 10_000,
+    /** … 내비 표본이 이만큼 연달아 같은 구간을 가리킬 때만 앞으로 간다(표본 하나로 굳히지 않는다). */
+    val stageConfirmSamples: Int = 2,
 )
 
 /** 화면이 그리는 데 필요한 엔진 상태. */

@@ -252,7 +252,7 @@ class CompanionEngineTest {
         rig.startAndDepart()
         rig.clear()
         rig.nav { copy(remainSec = 1400) } // 40%를 넘김
-        rig.advance(5)
+        rig.advance(12) // 표본 하나로는 바로 가지 않고 10초 이어지면 간다
         assertEquals(1, rig.spoken("stage_half").size)
         assertEquals(Stage.HALF, rig.snapshot().stage)
         assertEquals("절반쯤 왔어요", rig.snapshot().cardStage)
@@ -269,7 +269,7 @@ class CompanionEngineTest {
         rig.startAndDepart()
         rig.clear()
         rig.nav { copy(remainSec = 290) }
-        rig.advance(5)
+        rig.advance(12)
         val line = rig.spoken("stage_5min").single()
         assertTrue(line.text, line.text.contains("5분쯤"))
         assertEquals(Stage.SOON, rig.snapshot().stage)
@@ -282,7 +282,7 @@ class CompanionEngineTest {
         near.startAndDepart()
         near.clear()
         near.nav { copy(remainSec = 120) }
-        near.advance(5)
+        near.advance(12)
         assertEquals(Stage.SOON, near.snapshot().stage)
         assertEquals("stage_near", near.spoken().single().situation)
         assertTrue(near.spoken("stage_5min").isEmpty())
@@ -330,6 +330,83 @@ class CompanionEngineTest {
         rig.startAndDepart()
         assertEquals(listOf("intro", "depart"), rig.spoken().map { it.situation })
         assertEquals(Stage.SOON, rig.snapshot().stage)
+    }
+
+    @Test
+    fun `남은 시간 0 표본은 남은 거리도 가까울 때만 받는다`() {
+        val rig = Rig()
+        rig.startAndDepart()
+        rig.clear()
+        rig.nav { copy(remainSec = 0) } // 경로가 바뀌는 순간의 기본값 같은 것. 남은 거리는 모른다
+        rig.advance(30)
+        assertEquals(Stage.JUST_DEPARTED, rig.snapshot().stage)
+        rig.nav { copy(remainSec = 0, remainMeters = 5_000) } // 남은 거리는 멀다
+        rig.advance(30)
+        assertEquals(Stage.JUST_DEPARTED, rig.snapshot().stage)
+        assertTrue("'거의 다 왔어요'를 말하지 않는다", rig.spoken().isEmpty())
+        rig.set { copy(gear = Gear.PARK) }
+        rig.advance(10)
+        assertNotEquals("가짜 0 으로 도착하지 않는다", Phase.ARRIVED, rig.snapshot().phase)
+        rig.nav { copy(remainSec = 0, remainMeters = 40) } // 남은 거리도 가까우면 받는다
+        assertEquals(Phase.ARRIVED, rig.snapshot().phase)
+    }
+
+    @Test
+    fun `작은 남은 시간이 한 번만 들어와도 구간이 굳지 않는다`() {
+        val rig = Rig()
+        rig.startAndDepart()
+        rig.clear()
+        rig.nav { copy(remainSec = 100) } // 표본 하나(이전 경로가 남아 있음 등)
+        rig.advance(3)
+        rig.nav { copy(remainSec = 2300) } // 다음 표본은 제 값
+        rig.advance(30)
+        assertEquals(Stage.JUST_DEPARTED, rig.snapshot().stage)
+        assertTrue(rig.spoken().isEmpty())
+    }
+
+    @Test
+    fun `같은 구간을 가리키는 표본이 두 번 연달아 오거나 10초 이어지면 구간이 바뀐다`() {
+        val a = Rig()
+        a.startAndDepart()
+        a.clear()
+        a.nav { copy(remainSec = 1400) }
+        a.advance(2)
+        assertEquals(Stage.JUST_DEPARTED, a.snapshot().stage)
+        a.nav { copy(remainSec = 1390) } // 두 번째 표본
+        assertEquals(Stage.HALF, a.snapshot().stage)
+        a.advance(2)
+        assertEquals(1, a.spoken("stage_half").size)
+
+        val b = Rig()
+        b.startAndDepart()
+        b.clear()
+        b.nav { copy(remainSec = 1400) }
+        b.advance(9)
+        assertEquals(Stage.JUST_DEPARTED, b.snapshot().stage)
+        b.advance(1) // 같은 표본이 10초 이어짐
+        assertEquals(Stage.HALF, b.snapshot().stage)
+    }
+
+    @Test
+    fun `전체 시간이 크게 늘면 새 경로로 보고 구간을 다시 정한다`() {
+        // 이전 목적지의 짧은 경로가 남아 있다가 출발 뒤에 새 목적지를 정한 경우
+        val rig = Rig()
+        rig.signals = rig.signals.copy(nav = NavState(guiding = true, totalSec = 240, remainSec = 200))
+        rig.startAndDepart()
+        assertEquals(Stage.SOON, rig.snapshot().stage)
+        rig.clear()
+        rig.nav { copy(totalSec = 2400, remainSec = 2400, remainMeters = 20_000) }
+        assertEquals("새 경로에서는 지금 사실로 다시 정한다", Stage.JUST_DEPARTED, rig.snapshot().stage)
+        assertEquals("이제 출발해요", rig.snapshot().cardStage)
+        rig.advance(5)
+        assertTrue("되돌아간 구간을 따로 말하지는 않는다", rig.spoken().isEmpty())
+        rig.nav { copy(remainSec = 1400) }
+        rig.advance(12)
+        assertEquals(1, rig.spoken("stage_half").size)
+        // 길을 다시 찾아 조금 늘어난 것은 새 경로가 아니다(구간은 뒤로 가지 않는다)
+        rig.nav { copy(totalSec = 2600, remainSec = 1900) }
+        rig.advance(12)
+        assertEquals(Stage.HALF, rig.snapshot().stage)
     }
 
     @Test
@@ -693,7 +770,7 @@ class CompanionEngineTest {
         a.startAndDepart()
         a.clear()
         a.nav { copy(remainSec = 1400) }
-        a.advance(1)
+        a.advance(11)
         assertEquals(Priority.PROACTIVE, a.spoken("stage_half").single().priority)
         a.repeat()
         assertTrue("대답은 먼저 말하기를 끊는다", a.spoken().last().interrupt)
@@ -1014,6 +1091,7 @@ class CompanionEngineTest {
         set { this }
         assertEquals("이제 출발해요", cardLine())
         set { copy(nav = nav.copy(remainSec = 1400)) }
+        wait(10) // 내비 표본 하나로는 구간을 바로 바꾸지 않는다
         assertEquals("절반쯤 왔어요", cardLine())
         set { copy(brakePressed = true) }
         wait(21)
@@ -1021,6 +1099,7 @@ class CompanionEngineTest {
         set { copy(brakePressed = false) }
         assertEquals("절반쯤 왔어요", cardLine())
         set { copy(nav = nav.copy(remainSec = 200)) } // 곧 도착: 따로 없으면 '거의 다 옴' 카드를 쓴다
+        wait(10)
         assertEquals("거의 다 왔어요", cardLine())
         set { copy(gear = Gear.PARK, nav = nav.copy(remainSec = 900)) }
         set { copy(driverDoorOpen = true, driverSeatOccupied = false) }

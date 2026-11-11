@@ -5,6 +5,7 @@ import app.myeotbeonideun.engine.journey.IntervalPolicy
 import app.myeotbeonideun.engine.journey.Stage
 import app.myeotbeonideun.engine.journey.StageCalculator
 import app.myeotbeonideun.engine.model.Motion
+import app.myeotbeonideun.engine.model.NavState
 import app.myeotbeonideun.engine.model.Purpose
 import app.myeotbeonideun.engine.model.Signals
 import app.myeotbeonideun.engine.model.TripConfig
@@ -44,8 +45,26 @@ class CompanionEngine(
 
     private var startedAt = 0L
     private var departedAt: Long? = null
-    private var totalSec: Int? = null
     private var navArrived = false
+
+    // 내비 값. 남은 시간의 단위는 초다(2026-11-11 Pleos Connect 에뮬레이터: 9분 경로 = 540).
+    /** 받아들인 남은 시간. 0 은 남은 거리도 가까울 때만 받는다(경로가 바뀌는 순간의 기본값 0 같은 표본을 거른다). */
+    private var acceptedRemainSec: Int? = null
+    private var totalSec: Int? = null
+    private var lastNav: NavState? = null
+    /** 내비 값이 바뀐 횟수(표본 번호). */
+    private var navSample = 0
+    private var lastNavTotalSec: Int? = null
+    /** 전체 시간이 크게 늘었다(새 경로). 구간을 앞뒤 따지지 않고 다시 정한다. */
+    private var newRoute = false
+
+    // 구간 확인: 내비 남은 시간으로 정한 구간은 같은 구간이 표본 2개 연달아 또는 10초 이어질 때만 앞으로 간다.
+    private var stageCandidate: Stage? = null
+    private var stageCandidateSinceMs = 0L
+    private var stageCandidateSamples = 0
+    private var stageCandidateLastSample = -1
+    /** 출발 순간의 구간처럼 따로 말하지 않고 반영만 할 후보인지. */
+    private var stageCandidateSilent = false
 
     // 멈춤 판단에 쓰는 시간 기록
     private var parkedSince: Long? = null
@@ -316,6 +335,37 @@ class CompanionEngine(
         } else {
             stationarySince = null
         }
+        updateNav()
+    }
+
+    /**
+     * 내비 값을 받아들인다.
+     * - 남은 시간 0(또는 음수)은 남은 거리도 가까울 때나 도착 이벤트와 함께일 때만 받는다. 아니면 그 표본은 버린다.
+     * - 전체 시간이 크게 늘면(5분과 4분의 1 가운데 큰 것 이상) 새 경로로 보고 구간을 다시 정하게 한다.
+     */
+    private fun updateNav() {
+        val nav = signals.nav
+        if (nav != lastNav) {
+            navSample++
+            lastNav = nav
+        }
+        val r = nav.remainSec
+        acceptedRemainSec = when {
+            r == null -> null
+            r > 0 -> r
+            navArrived || (nav.remainMeters != null && nav.remainMeters <= ARRIVE_REMAIN_METERS) -> 0
+            else -> acceptedRemainSec
+        }
+        val navTotal = nav.totalSec?.takeIf { it > 0 }
+        if (navTotal != null) {
+            val prev = lastNavTotalSec
+            if (prev != null && navTotal - prev >= maxOf(NEW_ROUTE_MIN_INCREASE_SEC, prev / 4)) {
+                newRoute = true
+                totalSec = navTotal
+            }
+            lastNavTotalSec = navTotal
+        }
+        acceptedRemainSec?.let { remain -> totalSec = maxOf(totalSec ?: 0, navTotal ?: 0, remain) }
     }
 
     /** 문·창문·안전띠(명세 3.4). 주행 단일 때만 본다. */
@@ -397,9 +447,14 @@ class CompanionEngine(
         if (!departed) return
         phase = Phase.DRIVING
         departedAt = now
-        // 짧은 길이라 이미 '곧 도착' 구간이어도 첫마디는 출발 안내다. 구간은 화면과 다음 말에만 반영한다.
-        stage = computeStage(now)
+        newRoute = false
+        // 짧은 길이라 이미 '곧 도착' 구간이어도 첫마디는 출발 안내다. 그 구간은 화면과 다음 말에만 반영한다.
+        // 다만 내비 남은 시간으로 정한 구간은 출발 순간의 표본 하나로 굳히지 않고, 확인되면 말없이 반영한다.
         stageToAnnounce = Stage.JUST_DEPARTED
+        resetStageCandidate()
+        stage = timeOnlyStage(now)
+        val computed = computeStage(now)
+        if (computed.ordinal > stage.ordinal) startStageCandidate(computed, now, silent = true)
     }
 
     /** 멈춤의 순간(명세 3.3). */
@@ -471,13 +526,29 @@ class CompanionEngine(
         ignoreQuiet: Boolean = false,
     ) = Candidate(situation, Priority.STOP, SpeechKind.STOP, now, validWhile = validWhile, ignoreQuiet = ignoreQuiet)
 
-    /** 구간이 바뀌면 먼저 말한다. 구간은 앞으로만 간다(어르신께 "절반" 뒤에 "가는 중"이라고 말하지 않기 위해). */
+    /**
+     * 구간이 바뀌면 먼저 말한다. 구간은 앞으로만 간다(어르신께 "절반" 뒤에 "가는 중"이라고 말하지 않기 위해).
+     * 그래서 내비 표본 하나로 앞으로 가지 않고([confirmStage]), 새 경로일 때만 다시 정한다.
+     */
     private fun evaluateStage(now: Long, out: MutableList<EngineAction>) {
         if (phase != Phase.DRIVING) return
         val computed = computeStage(now)
-        if (computed.ordinal > stage.ordinal) {
-            stage = computed
-            stageToAnnounce = computed
+        when {
+            newRoute -> {
+                // 새 경로: 앞뒤를 따지지 않고 지금 사실로 다시 정한다. 되돌아간 구간을 따로 말하지는 않는다.
+                newRoute = false
+                resetStageCandidate()
+                stage = computed
+            }
+            computed.ordinal > stage.ordinal ->
+                if (computed.ordinal <= timeOnlyStage(now).ordinal) {
+                    // 출발 2분이 지났거나 근접 알림을 받은 것처럼 내비 표본과 상관없는 구간은 바로 간다.
+                    resetStageCandidate()
+                    advanceStage(computed, announce = true)
+                } else {
+                    confirmStage(computed, now)
+                }
+            else -> resetStageCandidate()
         }
         val s = stageToAnnounce ?: return
         if (isQuiet(now)) {
@@ -495,11 +566,53 @@ class CompanionEngine(
         )
     }
 
+    /**
+     * 내비 표본이 가리키는 구간을 바로 믿지 않는다. 지금보다 앞 구간을 가리키는 표본이 [EngineParams.stageConfirmSamples]개
+     * 연달아 오거나 [EngineParams.stageConfirmMs] 동안 이어질 때, 그동안 가장 낮게 가리킨 구간까지 간다.
+     */
+    private fun confirmStage(computed: Stage, now: Long) {
+        val c = stageCandidate
+        if (c == null) {
+            startStageCandidate(computed, now, silent = false)
+        } else {
+            if (computed.ordinal < c.ordinal) stageCandidate = computed
+            if (navSample != stageCandidateLastSample) {
+                stageCandidateSamples++
+                stageCandidateLastSample = navSample
+            }
+        }
+        if (stageCandidateSamples >= params.stageConfirmSamples || now - stageCandidateSinceMs >= params.stageConfirmMs) {
+            val target = stageCandidate ?: return
+            val silent = stageCandidateSilent
+            resetStageCandidate()
+            advanceStage(target, announce = !silent)
+        }
+    }
+
+    private fun startStageCandidate(s: Stage, now: Long, silent: Boolean) {
+        stageCandidate = s
+        stageCandidateSinceMs = now
+        stageCandidateSamples = 1
+        stageCandidateLastSample = navSample
+        stageCandidateSilent = silent
+    }
+
+    private fun resetStageCandidate() {
+        stageCandidate = null
+        stageCandidateSamples = 0
+        stageCandidateSilent = false
+    }
+
+    private fun advanceStage(s: Stage, announce: Boolean) {
+        stage = s
+        if (announce) stageToAnnounce = s
+    }
+
     /** 일정 간격마다 먼저 말한다. 어떤 말이든 한 뒤로 간격을 다시 센다. */
     private fun evaluateProactive(now: Long, out: MutableList<EngineAction>) {
         if (phase != Phase.DRIVING || stopReason != StopReason.NONE) return
         if (isQuiet(now) || stageToAnnounce != null || !channelFree(now)) return
-        val intervalSec = IntervalPolicy.intervalSec(config.interval, signals.nav.remainSec) ?: return
+        val intervalSec = IntervalPolicy.intervalSec(config.interval, acceptedRemainSec) ?: return
         val last = lastPassengerSpeechAt ?: departedAt ?: return
         if (now - last < intervalSec * 1000L) return
         val situation = stageSituationForRepeat()
@@ -509,18 +622,22 @@ class CompanionEngine(
         )
     }
 
-    private fun computeStage(now: Long): Stage {
-        val nav = signals.nav
-        nav.remainSec?.let { r -> totalSec = maxOf(totalSec ?: 0, nav.totalSec ?: 0, r) }
-        val elapsed = (((now - (departedAt ?: now)) / 1000).toInt()).coerceAtLeast(0)
-        return StageCalculator.stageOf(totalSec, nav.remainSec, elapsed, nav.nearDestination)
-    }
+    private fun computeStage(now: Long): Stage =
+        StageCalculator.stageOf(totalSec, acceptedRemainSec, elapsedSec(now), signals.nav.nearDestination)
+
+    /** 내비 남은 시간 없이, 출발 뒤 지난 시간과 근접 알림만으로 본 구간. */
+    private fun timeOnlyStage(now: Long): Stage =
+        StageCalculator.stageOf(null, null, elapsedSec(now), signals.nav.nearDestination)
+
+    private fun elapsedSec(now: Long): Int = (((now - (departedAt ?: now)) / 1000).toInt()).coerceAtLeast(0)
 
     private fun isNearDestination(): Boolean {
         val nav = signals.nav
-        return nav.nearDestination ||
-            (nav.remainSec != null && nav.remainSec <= ARRIVE_REMAIN_SEC) ||
-            (nav.remainMeters != null && nav.remainMeters <= ARRIVE_REMAIN_METERS)
+        val remain = acceptedRemainSec
+        // 남은 거리는 남은 시간과 어긋나지 않을 때만 믿는다(거리 0 만 따로 오는 표본 대비).
+        val metersNear = nav.remainMeters != null && nav.remainMeters <= ARRIVE_REMAIN_METERS &&
+            (remain == null || remain <= StageCalculator.SOON_SEC)
+        return nav.nearDestination || (remain != null && remain <= ARRIVE_REMAIN_SEC) || metersNear
     }
 
     /** 지금 이 순간의 사실을 말하는 상황 이름. '다시 말씀드리기'가 쓰는 것. */
@@ -549,7 +666,7 @@ class CompanionEngine(
         if (s == Stage.SOON && !fiveMinuteLineFits()) Stage.NEAR.situation else s.situation
 
     private fun fiveMinuteLineFits(): Boolean {
-        val remain = signals.nav.remainSec ?: return false
+        val remain = acceptedRemainSec ?: return false
         return remain > FIVE_MIN_LINE_MIN_SEC && remain <= StageCalculator.SOON_SEC
     }
 
@@ -686,6 +803,8 @@ class CompanionEngine(
         /** 남은 시간·거리가 이 안이고 P단이면 도착으로 본다. */
         const val ARRIVE_REMAIN_SEC = 60
         const val ARRIVE_REMAIN_METERS = 150
+        /** 내비의 전체 시간이 이만큼(그리고 4분의 1) 넘게 늘면 새 경로로 본다. */
+        const val NEW_ROUTE_MIN_INCREASE_SEC = 5 * 60
         /** 남은 시간이 이보다 많고 5분 이하일 때만 "5분쯤 남았어요"를 쓴다. */
         const val FIVE_MIN_LINE_MIN_SEC = 3 * 60
         /** 운전자 알림의 급한 정도. 큰 것이 화면 한 줄을 먼저 차지한다. */

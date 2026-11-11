@@ -25,7 +25,7 @@ data class NavState(
     val destinationName: String? = null,
     /** 출발할 때의 전체 예상 시간(초). */
     val totalSec: Int? = null,
-    /** 남은 시간(초). */
+    /** 남은 시간(초). 단위는 2026-11-11 Pleos Connect 에뮬레이터에서 확인했다(9분 경로 = 540). */
     val remainSec: Int? = null,
     /** 남은 거리(m). */
     val remainMeters: Int? = null,
