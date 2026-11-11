@@ -27,7 +27,8 @@ import app.myeotbeonideun.engine.stop.StopReason
  * - 문장은 대본(ScriptBook)의 고정 문장만 쓴다. 실행 중에 문장을 만들지 않는다.
  * - 한 번의 이동에 인스턴스 하나를 쓴다. 한 스레드에서만 부른다.
  *
- * 쓰는 순서: [start] → ([onSignals] | [onTick] | [requestRepeat] | [quiet] | [onPassengerAsked] | [onUtteranceResult])* → [finish]
+ * 쓰는 순서: [start] → ([onSignals] | [onTick] | [requestRepeat] | [quiet] | [onPassengerAsked] |
+ *   [driverConfirmedArrival] | [onUtteranceResult])* → [finish]
  *
  * 기록의 횟수는 바깥(음성)이 [onUtteranceResult] 로 '실제로 소리 냈다'고 알려 준 말만 센다.
  */
@@ -153,6 +154,19 @@ class CompanionEngine(
     fun onNavArrived(nowMs: Long): List<EngineAction> {
         if (phase == Phase.DRIVING) navArrived = true
         return evaluate(nowMs)
+    }
+
+    /**
+     * 운전자가 도착을 알렸다(화면의 '도착했어요' 버튼 등). 내비 없이 가는 길에서는 차가 도착을 스스로 알 수 없다.
+     * 도착 안내(arrive)를 하고 phase 를 ARRIVED 로 바꾸며 [Arrived] 를 낸다(도착 지점을 기억하는 계기).
+     * 이미 도착했거나 끝났으면 아무것도 하지 않는다.
+     */
+    fun driverConfirmedArrival(nowMs: Long): List<EngineAction> {
+        if (phase == Phase.ENDED || phase == Phase.ARRIVED) return emptyList()
+        val out = ArrayList<EngineAction>()
+        enterArrived(nowMs, ArrivalSource.DRIVER, out)
+        out += evaluate(nowMs)
+        return out
     }
 
     /** 시간이 흘렀다. 1초쯤마다 부른다. */
@@ -292,6 +306,7 @@ class CompanionEngine(
             cardTitle = script.at("card_title", 0) ?: config.place,
             cardStage = cardStageLine(),
             counts = counts,
+            canConfirmArrival = phase == Phase.DRIVING && signals.motion != Motion.IN_DRIVE,
         )
     }
 
@@ -475,18 +490,14 @@ class CompanionEngine(
                 passengerSeatOccupied = s.seatOccupied,
                 nearDestination = driving && isNearDestination(),
                 navArrived = driving && navArrived,
+                farFromDestination = driving && navSaysFar(),
                 departed = driving,
             ),
         )
         stopReason = reason
         when (reason) {
-            StopReason.ARRIVED -> {
-                phase = Phase.ARRIVED
-                stage = Stage.ARRIVED
-                stageToAnnounce = null
-                pending.clear()
-                offer(Candidate("arrive", Priority.STOP, SpeechKind.STOP, now, ignoreQuiet = true), now, out)
-            }
+            StopReason.ARRIVED ->
+                enterArrived(now, if (navArrived) ArrivalSource.NAV_EVENT else ArrivalSource.NEAR_DESTINATION, out)
             StopReason.DRIVER_AWAY -> {
                 // 운전자가 차에 없으므로 '잠시 조용히'와 상관없이 말한다. 혼자 남은 때가 가장 불안하다.
                 waypointAnnounced = true
@@ -500,10 +511,12 @@ class CompanionEngine(
             }
             StopReason.DRIVER_BACK ->
                 offer(stopCandidate("driver_back", now, validWhile = null, ignoreQuiet = true), now, out)
-            StopReason.WAYPOINT_STOP ->
+            // P단 정차는 한 번만 말한다. 내비가 넉넉히 남았다고 할 때만 "아직 다 온 건 아니에요"(경유지),
+            // 그 밖에는 도착을 부정하지 않는 말("차를 세웠어요. 따님이 알려 드릴 때까지 앉아 계세요.")을 쓴다.
+            StopReason.WAYPOINT_STOP, StopReason.PARKED_UNSURE ->
                 if (!waypointAnnounced) {
                     waypointAnnounced = true
-                    offer(stopCandidate("stop_waypoint", now, StopReason.WAYPOINT_STOP), now, out)
+                    offer(stopCandidate(reason.situation!!, now, reason), now, out)
                 }
             StopReason.SIGNAL_WAIT, StopReason.TRAFFIC -> {
                 val entered = prev != StopReason.SIGNAL_WAIT && prev != StopReason.TRAFFIC
@@ -517,6 +530,18 @@ class CompanionEngine(
             }
             StopReason.NONE -> Unit
         }
+    }
+
+    /** 도착했다. 도착 안내를 하고 [Arrived] 를 낸다. */
+    private fun enterArrived(now: Long, source: ArrivalSource, out: MutableList<EngineAction>) {
+        phase = Phase.ARRIVED
+        stage = Stage.ARRIVED
+        stopReason = StopReason.ARRIVED
+        stageToAnnounce = null
+        resetStageCandidate()
+        pending.clear()
+        offer(Candidate("arrive", Priority.STOP, SpeechKind.STOP, now, ignoreQuiet = true), now, out)
+        out += Arrived(source)
     }
 
     private fun stopCandidate(
@@ -640,6 +665,17 @@ class CompanionEngine(
         return nav.nearDestination || (remain != null && remain <= ARRIVE_REMAIN_SEC) || metersNear
     }
 
+    /**
+     * 내비가 남은 시간이 넉넉하다고 알려 주는지(곧 도착 구간보다 멀고, 남은 거리를 알면 1km 넘게 남음).
+     * 남은 시간·근접 정보가 없으면 false 다. 이때만 P단 정차를 "아직 다 온 건 아니에요"로 말한다.
+     */
+    private fun navSaysFar(): Boolean {
+        val remain = acceptedRemainSec ?: return false
+        if (remain <= StageCalculator.SOON_SEC || signals.nav.nearDestination) return false
+        val meters = signals.nav.remainMeters
+        return meters == null || meters > WAYPOINT_MIN_REMAIN_METERS
+    }
+
     /** 지금 이 순간의 사실을 말하는 상황 이름. '다시 말씀드리기'가 쓰는 것. */
     private fun currentFactSituation(): String = when {
         phase == Phase.ARRIVED -> "arrive"
@@ -649,7 +685,7 @@ class CompanionEngine(
 
     /** 지금 서 있는 이유를 말하는 상황 이름. 서 있지 않으면 null */
     private fun activeStopSituation(): String? = when (stopReason) {
-        StopReason.SIGNAL_WAIT, StopReason.TRAFFIC, StopReason.WAYPOINT_STOP -> stopReason.situation
+        StopReason.SIGNAL_WAIT, StopReason.TRAFFIC, StopReason.WAYPOINT_STOP, StopReason.PARKED_UNSURE -> stopReason.situation
         StopReason.DRIVER_AWAY -> "driver_away_again"
         else -> null
     }
@@ -688,7 +724,7 @@ class CompanionEngine(
         if (phase != Phase.ARRIVED) {
             val stopCard = when (stopReason) {
                 StopReason.DRIVER_AWAY -> "card_driver_away"
-                StopReason.SIGNAL_WAIT, StopReason.TRAFFIC, StopReason.WAYPOINT_STOP -> "card_stop"
+                StopReason.SIGNAL_WAIT, StopReason.TRAFFIC, StopReason.WAYPOINT_STOP, StopReason.PARKED_UNSURE -> "card_stop"
                 else -> null
             }
             stopCard?.let { script.at(it, 0) }?.let { return it }
@@ -803,6 +839,8 @@ class CompanionEngine(
         /** 남은 시간·거리가 이 안이고 P단이면 도착으로 본다. */
         const val ARRIVE_REMAIN_SEC = 60
         const val ARRIVE_REMAIN_METERS = 150
+        /** P단 정차를 경유지로 보려면 남은 거리를 알 때 이보다 멀어야 한다. */
+        const val WAYPOINT_MIN_REMAIN_METERS = 1_000
         /** 내비의 전체 시간이 이만큼(그리고 4분의 1) 넘게 늘면 새 경로로 본다. */
         const val NEW_ROUTE_MIN_INCREASE_SEC = 5 * 60
         /** 남은 시간이 이보다 많고 5분 이하일 때만 "5분쯤 남았어요"를 쓴다. */

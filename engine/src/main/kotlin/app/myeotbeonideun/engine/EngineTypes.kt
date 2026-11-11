@@ -16,6 +16,16 @@ enum class Priority { PROACTIVE, ANSWER, STOP, SAFETY }
 /** 무엇 때문에 한 말인지. 기록 집계에 쓴다. */
 enum class SpeechKind { INTRO, PROACTIVE, DRIVER_REQUEST, ANSWER, STOP, SAFETY }
 
+/** 도착을 무엇으로 알았는지. */
+enum class ArrivalSource {
+    /** 내비의 도착 이벤트. */
+    NAV_EVENT,
+    /** 목적지 근처(남은 60초·150m, 근접 알림) + P단. */
+    NEAR_DESTINATION,
+    /** 운전자가 알렸다('도착했어요'). 내비 없이 가는 길에서는 이것뿐이다. */
+    DRIVER,
+}
+
 /** 엔진이 바깥(음성·화면)에 시키는 일. */
 sealed interface EngineAction
 
@@ -42,6 +52,9 @@ data class DriverNotice(val text: String, val situation: String, val urgent: Boo
 
 /** 하던 말을 멈춘다('잠시 조용히'). */
 data object Silence : EngineAction
+
+/** 도착했다(phase 가 ARRIVED 가 됨). 도착 지점을 기억하는 계기와 도착 뒤 자동 종료의 시작점으로 쓴다. */
+data class Arrived(val source: ArrivalSource) : EngineAction
 
 /** 시간 기준값. 시험과 시연에서 바꿀 수 있게 한곳에 모았다. */
 data class EngineParams(
@@ -97,4 +110,9 @@ data class EngineSnapshot(
     val cardTitle: String = "",
     val cardStage: String = "",
     val counts: TripCounts = TripCounts(),
+    /**
+     * 운전자가 '도착했어요'로 도착을 알릴 수 있는 때(출발한 뒤 아직 도착 전이고 주행 단이 아닐 때).
+     * 내비 없이 가는 길은 차가 도착을 스스로 알 수 없어 이것이 유일한 길이다([CompanionEngine.driverConfirmedArrival]).
+     */
+    val canConfirmArrival: Boolean = false,
 )

@@ -81,6 +81,8 @@ object ScriptValidator {
         "stop_signal" to Audience.PASSENGER,
         "stop_traffic" to Audience.PASSENGER,
         "stop_waypoint" to Audience.PASSENGER,
+        // 내비 정보 없이 P단으로 섰을 때: 도착을 부정하지 않는 말
+        "stop_parked_neutral" to Audience.PASSENGER,
         "driver_away" to Audience.PASSENGER,
         "driver_away_again" to Audience.PASSENGER,
         "driver_back" to Audience.PASSENGER,

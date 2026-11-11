@@ -28,10 +28,18 @@ class StopClassifierTest {
     }
 
     @Test
-    fun `도착 전에 P단으로 5초 서면 경유지 정차다`() {
-        val base = StopInput(Motion.PARKED, driverSeatOccupied = true, passengerSeatOccupied = true)
+    fun `내비가 넉넉히 남았다고 할 때 P단으로 5초 서면 경유지 정차다`() {
+        val base = StopInput(Motion.PARKED, driverSeatOccupied = true, passengerSeatOccupied = true, farFromDestination = true)
         assertEquals(StopReason.NONE, classify(base.copy(parkedForMs = 4_999)))
         assertEquals(StopReason.WAYPOINT_STOP, classify(base.copy(parkedForMs = 5_000)))
+    }
+
+    @Test
+    fun `내비 정보가 없거나 가까우면 P단 정차는 도착인지 모르는 정차다`() {
+        // 내비 없이 가는 길의 목적지일 수 있으므로 "아직 다 온 건 아니에요"라고 하지 않는다
+        val base = StopInput(Motion.PARKED, parkedForMs = 5_000, driverSeatOccupied = true, passengerSeatOccupied = true)
+        assertEquals(StopReason.PARKED_UNSURE, classify(base))
+        assertEquals("stop_parked_neutral", StopReason.PARKED_UNSURE.situation)
     }
 
     @Test
@@ -62,6 +70,7 @@ class StopClassifierTest {
             driverSeatOccupied = false,
             driverDoorOpenedSincePark = false,
             passengerSeatOccupied = true,
+            farFromDestination = true,
         )
         assertEquals(StopReason.WAYPOINT_STOP, classify(input))
     }
@@ -91,7 +100,7 @@ class StopClassifierTest {
     @Test
     fun `좌석 신호가 없는 차는 운전자 이탈을 판단하지 않는다`() {
         val input = StopInput(Motion.PARKED, parkedForMs = 30_000, driverSeatOccupied = null)
-        assertEquals(StopReason.WAYPOINT_STOP, classify(input))
+        assertEquals(StopReason.PARKED_UNSURE, classify(input))
     }
 
     @Test
@@ -99,7 +108,8 @@ class StopClassifierTest {
         val back = StopInput(Motion.PARKED, parkedForMs = 90_000, driverSeatOccupied = true, passengerSeatOccupied = true)
         assertEquals(StopReason.DRIVER_BACK, classify(back, previous = StopReason.DRIVER_AWAY))
         // 복귀는 한 번만 나오고, 그다음은 다시 정차 상태로 본다
-        assertEquals(StopReason.WAYPOINT_STOP, classify(back, previous = StopReason.DRIVER_BACK))
+        assertEquals(StopReason.PARKED_UNSURE, classify(back, previous = StopReason.DRIVER_BACK))
+        assertEquals(StopReason.WAYPOINT_STOP, classify(back.copy(farFromDestination = true), previous = StopReason.DRIVER_BACK))
     }
 
     @Test

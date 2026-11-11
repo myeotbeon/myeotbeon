@@ -9,8 +9,13 @@ enum class StopReason(val situation: String?) {
     SIGNAL_WAIT("stop_signal"),
     /** 서 있고, 내비가 경로에 정체가 있다고 알려 줬다. */
     TRAFFIC("stop_traffic"),
-    /** 도착 전에 P단으로 섰다. */
+    /** 도착 전에 P단으로 섰다. 내비가 아직 넉넉히 남았다고 알려 줄 때만 이것으로 본다("아직 다 온 건 아니에요"). */
     WAYPOINT_STOP("stop_waypoint"),
+    /**
+     * 출발한 뒤 P단으로 섰는데 도착인지 잠깐 정차인지 모른다(내비 남은 시간·근접 정보가 없거나 곧 도착 구간).
+     * 내비 없이 가는 길의 목적지에서 "아직 다 온 건 아니에요"라고 하지 않도록, 도착을 부정하지 않는 말을 쓴다.
+     */
+    PARKED_UNSURE("stop_parked_neutral"),
     /** P단에서 운전자가 내리고 동승자만 남았다. */
     DRIVER_AWAY("driver_away"),
     /** 내렸던 운전자가 돌아왔다(한 번만 나오는 값). */
@@ -35,6 +40,8 @@ data class StopInput(
     val passengerSeatOccupied: Boolean? = null,
     val nearDestination: Boolean = false,
     val navArrived: Boolean = false,
+    /** 내비가 남은 시간이 넉넉하다(곧 도착 구간보다 멀다)고 알려 준다. 이때만 P단 정차를 경유지 정차로 본다. */
+    val farFromDestination: Boolean = false,
     /** 이미 출발한 여정인지. 출발 전의 P단은 '경유지 정차'가 아니다. */
     val departed: Boolean = true,
 )
@@ -46,7 +53,7 @@ object StopClassifier {
     const val WAYPOINT_DWELL_MS = 5_000L
 
     /**
-     * 판단 순서: 도착 → 운전자 복귀 → 운전자 이탈 → 경유지 정차 → 정체 → 신호 대기.
+     * 판단 순서: 도착 → 운전자 복귀 → 운전자 이탈 → 경유지 정차(또는 도착인지 모르는 정차) → 정체 → 신호 대기.
      * 더 구체적인 사실이 앞선다.
      */
     fun classify(previous: StopReason, input: StopInput): StopReason {
@@ -65,7 +72,7 @@ object StopClassifier {
             return StopReason.DRIVER_AWAY
         }
         if (parked && input.departed && (input.parkedForMs ?: 0L) >= WAYPOINT_DWELL_MS) {
-            return StopReason.WAYPOINT_STOP
+            return if (input.farFromDestination) StopReason.WAYPOINT_STOP else StopReason.PARKED_UNSURE
         }
         if (input.motion == Motion.IN_DRIVE && (input.stationaryForMs ?: 0L) >= STATIONARY_MS) {
             return if (input.congested) StopReason.TRAFFIC else StopReason.SIGNAL_WAIT

@@ -4,12 +4,12 @@ import android.content.Context
 import android.os.SystemClock
 import app.myeotbeonideun.AppContainer
 import app.myeotbeonideun.data.SavedRoute
+import app.myeotbeonideun.engine.Arrived
 import app.myeotbeonideun.engine.CompanionEngine
 import app.myeotbeonideun.engine.DriverNotice
 import app.myeotbeonideun.engine.EngineAction
 import app.myeotbeonideun.engine.EngineParams
 import app.myeotbeonideun.engine.EngineSnapshot
-import app.myeotbeonideun.engine.Phase
 import app.myeotbeonideun.engine.Silence
 import app.myeotbeonideun.engine.Speak
 import app.myeotbeonideun.engine.model.TripConfig
@@ -170,6 +170,11 @@ class TripController(private val context: Context, private val c: AppContainer) 
                 }
                 is DriverNotice -> if (action.urgent) c.speech.chime()
                 Silence -> c.speech.stop()
+                // 도착(내비·목적지 근처·운전자가 알림): 도착 지점을 기억하고 10분 뒤 스스로 끝낼 시각을 잡는다.
+                is Arrived -> {
+                    arrivedAtMs = now()
+                    source?.let { rememberArrivalPoint(it) }
+                }
             }
         }
         publish()
@@ -181,10 +186,6 @@ class TripController(private val context: Context, private val c: AppContainer) 
         val src = source ?: return
         val t = now()
         val snapshot = e.snapshot(t)
-        if (snapshot.phase == Phase.ARRIVED && arrivedAtMs == null) {
-            arrivedAtMs = t
-            rememberArrivalPoint(src)
-        }
         _ui.value = TripUi(cfg, snapshot, src.kind, t)
     }
 

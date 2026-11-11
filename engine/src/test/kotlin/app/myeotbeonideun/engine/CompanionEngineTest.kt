@@ -66,6 +66,8 @@ private class Rig(
     fun repeat() = record(engine.requestRepeat(now))
     fun ask(intent: PassengerIntent) = record(engine.onPassengerAsked(intent, now))
     fun quiet() = record(engine.quiet(now))
+    fun confirmArrival() = record(engine.driverConfirmedArrival(now))
+    fun navArrived() = record(engine.onNavArrived(now))
 
     /** 1초씩 흘려보낸다. */
     fun advance(seconds: Int) = kotlin.repeat(seconds) {
@@ -83,6 +85,7 @@ private class Rig(
     fun spoken(): List<Speak> = log.map { it.second }.filterIsInstance<Speak>()
     fun spoken(situation: String): List<Speak> = spoken().filter { it.situation == situation }
     fun notices(): List<DriverNotice> = log.map { it.second }.filterIsInstance<DriverNotice>()
+    fun arrivals(): List<ArrivalSource> = log.map { it.second }.filterIsInstance<Arrived>().map { it.source }
     fun snapshot() = engine.snapshot(now)
     fun clear() = log.clear()
 }
@@ -530,6 +533,82 @@ class CompanionEngineTest {
     }
 
     @Test
+    fun `내비 없이 간 길에서 P단으로 서면 도착을 부정하지 않고 운전자가 도착을 알릴 수 있다`() {
+        val rig = Rig()
+        rig.signals = rig.signals.copy(nav = NavState()) // 매일 가는 병원·주간보호센터는 내비를 켜지 않는 일이 흔하다
+        rig.startAndDepart()
+        rig.advance(300)
+        assertFalse("달리는 동안은 도착을 알리는 버튼을 보이지 않는다", rig.snapshot().canConfirmArrival)
+        rig.clear()
+        rig.set { copy(gear = Gear.PARK) }
+        rig.advance(6)
+        val line = rig.spoken().single()
+        assertEquals("stop_parked_neutral", line.situation)
+        assertFalse(line.text, line.text.contains("아직") || line.text.contains("다 온 건"))
+        assertEquals(StopReason.PARKED_UNSURE, rig.snapshot().stopReason)
+        assertEquals("잠깐 멈췄어요", rig.snapshot().cardStage)
+        assertTrue(rig.snapshot().canConfirmArrival)
+        assertTrue("차가 스스로 도착이라고 하지 않는다", rig.arrivals().isEmpty())
+
+        // 다 왔느냐고 물어도, 다시 말씀드리기를 눌러도 같은 중립의 말로 대답한다
+        rig.advance(10)
+        rig.ask(PassengerIntent.ARRIVED_Q); rig.advance(10)
+        rig.repeat(); rig.advance(10)
+        assertEquals(listOf("stop_parked_neutral", "stop_parked_neutral", "stop_parked_neutral"), rig.spoken().map { it.situation })
+
+        // 운전자가 도착을 알린다 → 도착 안내, 도착 단계, 도착 이벤트(도착 지점을 기억하는 계기)
+        rig.clear()
+        rig.confirmArrival()
+        val arrive = rig.spoken().single()
+        assertEquals("arrive", arrive.situation)
+        assertTrue(arrive.text.contains("큰딸 집"))
+        assertEquals(Phase.ARRIVED, rig.snapshot().phase)
+        assertEquals(listOf(ArrivalSource.DRIVER), rig.arrivals())
+        assertTrue(rig.snapshot().cardStage, rig.snapshot().cardStage.contains("다 왔어요"))
+        assertFalse(rig.snapshot().canConfirmArrival)
+        rig.confirmArrival() // 두 번 눌러도 한 번
+        rig.advance(30)
+        assertEquals(1, rig.spoken("arrive").size)
+        assertEquals(1, rig.arrivals().size)
+        assertEquals(StopReason.ARRIVED, rig.snapshot().stopReason)
+    }
+
+    @Test
+    fun `내비가 남은 시간이 넉넉하다고 할 때만 아직 다 온 것이 아니라고 말한다`() {
+        fun parkedLine(nav: NavState): String {
+            val rig = Rig()
+            rig.signals = rig.signals.copy(nav = nav)
+            rig.startAndDepart()
+            rig.clear()
+            rig.set { copy(gear = Gear.PARK) }
+            rig.advance(6)
+            return rig.spoken().single().situation
+        }
+        assertEquals("stop_waypoint", parkedLine(NavState(guiding = true, totalSec = 2400, remainSec = 1500)))
+        assertEquals("stop_waypoint", parkedLine(NavState(guiding = true, totalSec = 2400, remainSec = 1500, remainMeters = 9_000)))
+        assertEquals("곧 도착 구간", "stop_parked_neutral", parkedLine(NavState(guiding = true, totalSec = 2400, remainSec = 200)))
+        assertEquals("남은 거리 1km 안", "stop_parked_neutral", parkedLine(NavState(guiding = true, totalSec = 2400, remainSec = 600, remainMeters = 800)))
+        assertEquals("내비 없음", "stop_parked_neutral", parkedLine(NavState()))
+    }
+
+    @Test
+    fun `내비 도착이나 목적지 근처 도착도 도착 이벤트를 낸다`() {
+        val nav = Rig()
+        nav.startAndDepart()
+        nav.clear()
+        nav.navArrived()
+        assertEquals(listOf(ArrivalSource.NAV_EVENT), nav.arrivals())
+        assertEquals("arrive", nav.spoken().single().situation)
+
+        val near = Rig()
+        near.startAndDepart()
+        near.nav { copy(remainSec = 30, remainMeters = 100) }
+        near.set { copy(gear = Gear.PARK) }
+        assertEquals(listOf(ArrivalSource.NEAR_DESTINATION), near.arrivals())
+        assertEquals(Phase.ARRIVED, near.snapshot().phase)
+    }
+
+    @Test
     fun `운전자가 내리면 알리고 기다리는 동안 다시 안심시키고 돌아오면 알린다`() {
         val rig = Rig()
         rig.startAndDepart()
@@ -555,6 +634,7 @@ class CompanionEngineTest {
         assertEquals(1, rig.spoken("driver_back").size)
         rig.advance(60)
         assertTrue("돌아온 뒤에 '잠깐 쉬었다 가요'를 덧붙이지 않는다", rig.spoken("stop_waypoint").isEmpty())
+        assertTrue(rig.spoken("stop_parked_neutral").isEmpty())
         assertEquals(3, rig.snapshot().counts.stopNotices)
     }
 
