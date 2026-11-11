@@ -26,6 +26,15 @@ class CallLimiterTest {
     }
 
     @Test
+    fun `먼저 보고 실제로 일을 했을 때만 세면 거절된 호출은 제한을 쓰지 않는다`() {
+        val l = CallLimiter(minGapMs = 4_000, maxInWindow = 4, windowMs = 60_000)
+        repeat(10) { i -> assertTrue("보기만 하면 세지 않는다", l.canAcquire(i * 5_000L)) }
+        l.record(50_000)
+        assertFalse(l.canAcquire(52_000))
+        assertTrue(l.canAcquire(54_000))
+    }
+
+    @Test
     fun `Gleo 함수별 제한 값`() {
         val g = GleoLimits()
         // 말하기: 4초 간격, 1분에 네 번

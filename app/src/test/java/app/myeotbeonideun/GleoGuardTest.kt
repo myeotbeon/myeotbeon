@@ -69,6 +69,27 @@ class GleoGuardTest {
     }
 
     @Test
+    fun `주행 중이라 거절한 다 왔다고 말하기는 제한에 세지 않는다`() {
+        val c = app.container
+        c.trip.start(TripConfig(place = "큰딸 집"))
+        c.demoSource.update { it.copy(gear = Gear.DRIVE) }
+        idle(20_000)
+        val receiver = GleoActionReceiver()
+        val arrived = Intent(Gleo.ACTION_REPEAT).putExtra(Gleo.EXTRA_PARAM, """{"arrived":true}""")
+        repeat(4) { // 4초 넘는 간격으로 네 번: 모두 주행 중이라 거절
+            receiver.onReceive(app, arrived)
+            assertTrue(responses().last().getString("message").contains("parked"))
+            idle(4_100)
+        }
+        c.demoSource.update { it.copy(gear = Gear.PARK) }
+        idle(8_000)
+        receiver.onReceive(app, arrived)
+        assertEquals("거절된 네 번은 1분에 네 번 제한을 쓰지 않았다", Gleo.STATUS_SUCCESS, responses().last().getString("status"))
+        idle(10_000)
+        assertFalse("도착 안내 뒤 동행을 마쳤다", c.trip.inProgress)
+    }
+
+    @Test
     fun `동행 시작은 짧은 사이에 거듭 받지 않고 응답에 가는 곳 이름을 싣지 않는다`() {
         val c = app.container
         c.store.saveRoute(TripConfig(place = "서울내과"), rememberArrival = false, nowMs = 1_000)

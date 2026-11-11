@@ -128,15 +128,21 @@ object Gleo {
             respond(context, ACTION_REPEAT, STATUS_FAIL, MESSAGE_NO_TRIP)
             return
         }
-        if (!container.gleoLimits.speak.tryAcquire(now())) {
+        val limiter = container.gleoLimits.speak
+        val at = now()
+        if (!limiter.canAcquire(at)) {
             respond(context, ACTION_REPEAT, STATUS_FAIL, MESSAGE_TOO_MANY)
             return
         }
         when (container.trip.confirmArrival()) {
-            ArrivalConfirm.CONFIRMED, ArrivalConfirm.ALREADY_ARRIVED -> respond(
-                context, ACTION_REPEAT, STATUS_SUCCESS,
-                "The passenger was told by voice that the car has arrived, and the ride companion is ending.", MODE_SILENT,
-            )
+            ArrivalConfirm.CONFIRMED, ArrivalConfirm.ALREADY_ARRIVED -> {
+                // 실제로 말했을 때만 센다. 주행 중·출발 전이라 거절한 호출은 세지 않는다(CallLimiter 의 약속, 검토 NEW-9).
+                limiter.record(at)
+                respond(
+                    context, ACTION_REPEAT, STATUS_SUCCESS,
+                    "The passenger was told by voice that the car has arrived, and the ride companion is ending.", MODE_SILENT,
+                )
+            }
             ArrivalConfirm.NO_TRIP -> respond(context, ACTION_REPEAT, STATUS_FAIL, MESSAGE_NO_TRIP)
             ArrivalConfirm.NOT_PARKED -> respond(
                 context, ACTION_REPEAT, STATUS_FAIL, "Arrival can only be told to the passenger after the car is parked.",
