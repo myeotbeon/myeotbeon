@@ -266,7 +266,7 @@ class CompanionEngine(
                 else -> whenSituation
             }
             PassengerIntent.WHY_STOPPED -> stopSituation ?: currentFactSituation()
-            // 집으로 가는 길이면 "…에 들렀다가 집에 가요"가 맞지 않는다. 어디 가는지를 그대로 말한다.
+            // 집으로 가는 길이면 "집에 가고 싶으시죠. 지금은 집에 가요"가 어색하다. 어디 가는지를 그대로 말한다.
             PassengerIntent.GO_HOME -> if (headingHome()) "ask_where" else "ask_gohome"
         }
         val out = ArrayList<EngineAction>()

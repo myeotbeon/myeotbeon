@@ -179,6 +179,8 @@ object Gleo {
         ALREADY_RUNNING,
         /** 저장된 길이 없어 화면에서 먼저 정해야 한다. */
         NEED_SETUP,
+        /** 말한 이름에 맞는 저장된 길이 없다. 다른 길로 시작하지 않고 화면에서 고르게 한다. */
+        NO_MATCH,
         /** 주행 중이라 받지 않았다(설정은 P단에서만). */
         DRIVING,
         /** 짧은 사이에 거듭 불러 받지 않았다(연속 호출 제한). */
@@ -212,7 +214,17 @@ object Gleo {
             )
             return StartResult.MOTION_UNKNOWN
         }
-        val route = pickRoute(container.store.routes.value, params.optString("destinationName"))
+        val routes = container.store.routes.value
+        val route = pickRoute(routes, params.optString("destinationName"))
+        if (route == null && routes.isNotEmpty()) {
+            // 이름을 말했는데 맞는 길이 없다. 가장 최근 길로 시작하면 어르신께 엉뚱한 곳을 말하게 되므로 되묻는다.
+            // 응답 방송은 다른 앱도 받을 수 있어 저장된 길의 이름은 싣지 않는다.
+            respond(
+                context, ACTION_START, STATUS_ASKING,
+                "No saved frequent trip matches that destination name. Please choose the trip on the screen.",
+            )
+            return StartResult.NO_MATCH
+        }
         if (route == null) {
             respond(
                 context, ACTION_START, STATUS_ASKING,
@@ -230,14 +242,14 @@ object Gleo {
         return StartResult.STARTED
     }
 
-    /** 이름이 맞는 길을 먼저, 없으면 가장 최근에 쓴 길. */
+    /** 이름을 말했으면 그 이름이 맞는 길(없으면 null — 다른 길로 대신하지 않는다), 말하지 않았으면 가장 최근에 쓴 길. */
     internal fun pickRoute(routes: List<SavedRoute>, name: String?): SavedRoute? {
         val wanted = name?.filterNot { it.isWhitespace() }.orEmpty()
         if (wanted.isNotEmpty()) {
-            routes.firstOrNull { r ->
+            return routes.firstOrNull { r ->
                 val place = r.config.place.filterNot { it.isWhitespace() }
-                place.contains(wanted) || wanted.contains(place)
-            }?.let { return it }
+                place.isNotEmpty() && (place.contains(wanted) || wanted.contains(place))
+            }
         }
         return routes.maxByOrNull { it.lastUsedAtMs }
     }

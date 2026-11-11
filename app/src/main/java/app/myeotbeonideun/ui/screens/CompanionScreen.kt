@@ -86,8 +86,8 @@ fun CompanionScreen(
         // 큰 창(가로 1700dp 급)에서는 글자를 더 키운다.
         val scale = if (maxWidth >= 1300.dp) 1.3f else 1f
         if (wide) {
+            // 버튼은 왼쪽에 둔다. 운전석이 왼쪽인 차에서 가운데 화면의 왼쪽이 운전자 손에 가장 가깝다.
             Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(40.dp)) {
-                ThreeLines(ui, scale, Modifier.weight(1.2f).fillMaxHeight())
                 Column(
                     Modifier.weight(1f).fillMaxHeight(),
                     verticalArrangement = Arrangement.spacedBy(24.dp, Alignment.CenterVertically),
@@ -95,6 +95,7 @@ fun CompanionScreen(
                     TwoButtons(ui, onRepeat, onQuiet, Modifier.weight(1f))
                     ParkedButtons(ui, onArrived, onEnd)
                 }
+                ThreeLines(ui, scale, Modifier.weight(1.2f).fillMaxHeight())
             }
         } else {
             Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(24.dp)) {

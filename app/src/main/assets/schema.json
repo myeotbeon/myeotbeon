@@ -1,7 +1,7 @@
 {
   "packageName": "app.myeotbeonideun",
   "appDescription": "A ride companion that tells a passenger where the car is going and how far along the trip is, as many times as needed, so the driver can keep driving.",
-  "invokeWord": "몇 번이든",
+  "invokeWord": "동행 안내",
   "version": "1.0.0",
   "actionCalls": [
     {

@@ -1530,13 +1530,18 @@ class CompanionEngineTest {
             assertEquals(config.place, "ask_where", line.situation)
             assertFalse(line.text, line.text.contains("들렀다가") || line.text.contains("들르"))
         }
-        // 다른 곳에 가는 길이면 마음을 받아 주고, 들렀다가 집에 간다고 말한다
+        // 다른 곳에 가는 길이면 마음을 받아 주고 지금 가는 곳을 말한다.
+        // 그 뒤에 집에 간다는 약속은 하지 않는다(그날 집에 가지 않을 수도 있다). 못 간다고 부정하지도 않는다.
         val rig = Rig(TripConfig(place = "병원", purpose = Purpose.CLINIC))
         rig.startAndDepart()
         rig.clear()
         rig.ask(PassengerIntent.GO_HOME); rig.advance(12)
-        assertEquals("ask_gohome", rig.spoken().single().situation)
-        assertTrue(rig.spoken().single().text.contains("집에 가요"))
+        val spoken = rig.spoken().single()
+        assertEquals("ask_gohome", spoken.situation)
+        assertTrue(spoken.text, spoken.text.contains("병원"))
+        for (promise in listOf("집에 가요", "들렀다", "갔다가", "못 가")) {
+            assertFalse(spoken.text, spoken.text.contains(promise))
+        }
     }
 
     @Test

@@ -173,13 +173,15 @@ class GleoTest {
     }
 
     @Test
-    fun `동행 시작은 이름이 맞는 길을 먼저 고르고 없으면 가장 최근 길을 고른다`() {
+    fun `동행 시작은 이름이 맞는 길을 고르고, 이름이 없을 때만 가장 최근 길을 고른다`() {
         fun route(place: String, at: Long) = SavedRoute(config = TripConfig(place = place), lastUsedAtMs = at)
         val routes = listOf(route("큰딸 집", 10), route("주간보호센터", 30), route("병원", 20))
         assertEquals("큰딸 집", Gleo.pickRoute(routes, "큰딸집")!!.config.place)
         assertEquals("병원", Gleo.pickRoute(routes, "서울 병원")!!.config.place)
         assertEquals("주간보호센터", Gleo.pickRoute(routes, null)!!.config.place)
-        assertEquals("주간보호센터", Gleo.pickRoute(routes, "모르는 곳")!!.config.place)
+        // 말한 이름에 맞는 길이 없으면 다른 길로 대신하지 않는다(어르신께 엉뚱한 곳을 말하게 된다) → 화면에서 고르게 한다
+        assertNull(Gleo.pickRoute(routes, "모르는 곳"))
+        assertEquals("주간보호센터", Gleo.pickRoute(routes, "  ")!!.config.place)
         assertNull(Gleo.pickRoute(emptyList(), "큰딸 집"))
     }
 

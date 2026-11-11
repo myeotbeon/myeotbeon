@@ -191,6 +191,12 @@ class AppFlowTest {
         assertEquals(Gleo.StartResult.ALREADY_RUNNING, Gleo.handleStart(app, c, org.json.JSONObject()))
         c.trip.end()
 
+        // 말한 이름에 맞는 길이 없으면 가장 최근 길로 시작하지 않고 되묻는다(응답에 저장된 길 이름은 싣지 않는다)
+        val unknown = org.json.JSONObject().put("destinationName", "모르는 곳")
+        assertEquals(Gleo.StartResult.NO_MATCH, Gleo.handleStart(app, c, unknown))
+        assertFalse(c.trip.inProgress)
+        assertEquals(Gleo.STATUS_ASKING, lastGleoResponse().getString("status"))
+
         c.store.clearAll()
         assertEquals(Gleo.StartResult.NEED_SETUP, Gleo.handleStart(app, c, org.json.JSONObject()))
         assertEquals(Gleo.STATUS_ASKING, lastGleoResponse().getString("status"))
