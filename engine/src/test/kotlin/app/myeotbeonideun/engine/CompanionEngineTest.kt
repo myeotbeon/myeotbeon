@@ -413,6 +413,22 @@ class CompanionEngineTest {
     }
 
     @Test
+    fun `새 경로로 구간을 다시 정하면 아직 말하지 못한 앞 구간 안내는 버린다`() {
+        val rig = Rig()
+        rig.startAndDepart()
+        rig.clear()
+        rig.repeat() // 대답하는 동안에는 구간 안내가 기다린다
+        rig.nav { copy(remainSec = 1400) }
+        rig.advance(1)
+        rig.nav { copy(remainSec = 1390) } // 두 번째 표본: 절반으로 확인됐지만 아직 말하지 못함
+        assertEquals(Stage.HALF, rig.snapshot().stage)
+        rig.nav { copy(totalSec = 4_800, remainSec = 4_700) } // 그사이 목적지가 바뀌어 새 경로
+        rig.advance(20)
+        assertEquals(Stage.JUST_DEPARTED, rig.snapshot().stage)
+        assertTrue("바뀐 경로에서 '절반쯤 왔어요'를 말하지 않는다", rig.spoken("stage_half").isEmpty())
+    }
+
+    @Test
     fun `간격 5분이면 마지막 말 뒤 5분마다 먼저 말한다`() {
         val rig = Rig(TripConfig(place = "큰딸 집", interval = IntervalMode.FIVE_MIN))
         rig.startAndDepart()

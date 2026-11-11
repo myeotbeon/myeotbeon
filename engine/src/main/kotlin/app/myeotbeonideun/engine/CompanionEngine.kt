@@ -693,10 +693,12 @@ class CompanionEngine(
         val computed = computeStage(now)
         when {
             newRoute -> {
-                // 새 경로: 앞뒤를 따지지 않고 지금 사실로 다시 정한다. 되돌아간 구간을 따로 말하지는 않는다.
+                // 새 경로: 앞뒤를 따지지 않고 지금 사실로 다시 정한다. 되돌아간 구간을 따로 말하지는 않고,
+                // 아직 말하지 못한 앞 구간 안내도 버린다(출발 안내는 남긴다).
                 newRoute = false
                 resetStageCandidate()
                 stage = computed
+                if (stageToAnnounce != Stage.JUST_DEPARTED) stageToAnnounce = null
             }
             computed.ordinal > stage.ordinal ->
                 if (computed.ordinal <= timeOnlyStage(now).ordinal) {
@@ -929,7 +931,7 @@ class CompanionEngine(
         lastLineAt = now
     }
 
-    /** 화제 전환 한마디. 목적이 없으면 붙이지 않는다. 직접 쓴 한마디는 그대로 읽는다. */
+    /** 화제 전환 한마디. 목적이 없으면 붙이지 않는다. 직접 쓴 한마디는 검사를 통과했을 때만 읽는다. */
     private fun redirectLine(): String? = when (config.purpose) {
         Purpose.NONE -> null
         // 직접 쓴 한마디도 대본의 화제 전환 줄과 같은 검사(금지어·길이)를 통과해야 읽는다. 통과하지 못하면 붙이지 않는다.
@@ -937,7 +939,6 @@ class CompanionEngine(
             ?.takeIf { ScriptValidator.validateCustomRedirect(it).isEmpty() }
         else -> config.purpose.situation?.let { script.next(it) }?.let { withoutCall(it, config.honorific) }
     }
-
 
     /**
      * 운전자 화면에 알림을 올린다. 상황마다 따로 보관하고 화면에는 가장 급한 것 하나를 보인다([topNotice]).
@@ -953,7 +954,7 @@ class CompanionEngine(
         notices.remove(situation)
     }
 
-    /** 화면에 보일 알림: 급한 것 > 급한 정도(문 > 안전띠 > 창문) > 나중 것. */
+    /** 화면에 보일 알림: 급한 것 > 급한 정도([NOTICE_RANK]: 주행 중 문 > 이탈 중 자리 비움·문 > 안전띠 > 창문) > 나중 것. */
     private fun topNotice(): Notice? =
         notices.values.maxWithOrNull(
             compareBy<Notice>({ it.urgent }, { NOTICE_RANK[it.situation] ?: 0 }, { it.atMs }),
