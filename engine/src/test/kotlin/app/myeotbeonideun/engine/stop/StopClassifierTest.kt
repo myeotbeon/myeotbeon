@@ -4,6 +4,32 @@ import app.myeotbeonideun.engine.model.Motion
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
+class DebouncedTest {
+    @Test
+    fun `값이 바뀌면 정한 시간 동안 그대로일 때만 받는다`() {
+        val d = Debounced(2_500)
+        assertEquals(true, d.update(true, 0)) // 처음 값은 바로
+        assertEquals(true, d.update(false, 1_000))
+        assertEquals(true, d.update(false, 3_000))
+        assertEquals(false, d.update(false, 3_500))
+        // 잠깐 흔들렸다 돌아오면 받지 않는다
+        assertEquals(false, d.update(true, 4_000))
+        assertEquals(false, d.update(false, 5_000))
+        assertEquals(false, d.update(true, 6_000))
+        assertEquals(false, d.update(true, 8_000))
+        assertEquals(true, d.update(true, 8_500))
+    }
+
+    @Test
+    fun `신호가 끊기거나 다시 들어오는 것은 바로 받는다`() {
+        val d = Debounced(2_500)
+        assertEquals(null, d.update(null, 0))
+        assertEquals(true, d.update(true, 100))
+        assertEquals(null, d.update(null, 200))
+        assertEquals(false, d.update(false, 300))
+    }
+}
+
 class StopClassifierTest {
     private fun classify(input: StopInput, previous: StopReason = StopReason.NONE) =
         StopClassifier.classify(previous, input)

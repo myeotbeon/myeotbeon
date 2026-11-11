@@ -693,6 +693,8 @@ class CompanionEngineTest {
         rig.advance(2)
         rig.set { copy(driverDoorOpen = true) }
         rig.set { copy(driverSeatOccupied = false) }
+        assertTrue("좌석 값은 2.5초 그대로일 때 받는다", rig.spoken().isEmpty())
+        rig.advance(3)
         val away = rig.spoken().single()
         assertEquals("driver_away", away.situation)
         assertTrue(away.text.contains("따님"))
@@ -715,12 +717,82 @@ class CompanionEngineTest {
     }
 
     @Test
+    fun `좌석 점유가 잠깐 흔들리면 운전자가 내렸다고 하지 않는다`() {
+        val rig = Rig()
+        rig.startAndDepart()
+        rig.set { copy(gear = Gear.PARK) }
+        rig.set { copy(driverDoorOpen = true) }
+        rig.set { copy(driverDoorOpen = false) } // 창밖 일로 문을 잠깐 열었다 닫음
+        rig.clear()
+        repeat(5) {
+            rig.set { copy(driverSeatOccupied = false) } // 앉은 채 몸을 들었다
+            rig.advance(2)
+            rig.set { copy(driverSeatOccupied = true) }
+            rig.advance(2)
+        }
+        assertTrue(rig.spoken("driver_away").isEmpty())
+        assertTrue(rig.spoken("driver_back").isEmpty())
+        assertNotEquals(StopReason.DRIVER_AWAY, rig.snapshot().stopReason)
+        // 동승 좌석 점유가 흔들려도 안전띠·이탈 판단이 흔들리지 않는다
+        rig.set { copy(seatOccupied = false) }
+        rig.advance(2)
+        rig.set { copy(seatOccupied = true) }
+        rig.advance(5)
+        assertTrue(rig.spoken().none { it.kind == SpeechKind.STOP && it.situation.startsWith("driver_") })
+    }
+
+    @Test
+    fun `운전자가 돌아온 뒤에는 운전석 문이 새로 열려야 다시 내렸다고 본다`() {
+        val rig = Rig()
+        rig.startAndDepart()
+        rig.set { copy(gear = Gear.PARK) }
+        rig.set { copy(driverDoorOpen = true, driverSeatOccupied = false) }
+        rig.advance(3)
+        rig.set { copy(driverSeatOccupied = true, driverDoorOpen = false) }
+        rig.advance(10)
+        assertEquals(1, rig.spoken("driver_back").size)
+        rig.clear()
+        rig.set { copy(driverSeatOccupied = false) } // 앉은 채로 좌석 값이 꺼짐(문은 닫힌 채)
+        rig.advance(60)
+        assertTrue(rig.spoken("driver_away").isEmpty())
+        rig.set { copy(driverDoorOpen = true) } // 이번에는 정말 내린다
+        rig.advance(3)
+        assertEquals(1, rig.spoken("driver_away").size)
+    }
+
+    @Test
+    fun `30초 안에 다시 내리면 내렸다는 말을 되풀이하지 않고 돌아왔다는 말도 하지 않는다`() {
+        val rig = Rig()
+        rig.startAndDepart()
+        rig.set { copy(gear = Gear.PARK) }
+        rig.set { copy(driverDoorOpen = true, driverSeatOccupied = false) }
+        rig.advance(3)
+        rig.set { copy(driverSeatOccupied = true, driverDoorOpen = false) }
+        rig.advance(8)
+        assertEquals(1, rig.spoken("driver_away").size)
+        assertEquals(1, rig.spoken("driver_back").size)
+        // 짐을 두고 와 곧바로 다시 내렸다가 돌아옴
+        rig.set { copy(driverDoorOpen = true, driverSeatOccupied = false) }
+        rig.advance(3)
+        rig.set { copy(driverSeatOccupied = true, driverDoorOpen = false) }
+        rig.advance(8)
+        assertEquals("30초 안의 재진입은 말하지 않는다", 1, rig.spoken("driver_away").size)
+        assertEquals("말없이 지나간 이탈 뒤에는 돌아왔다고도 하지 않는다", 1, rig.spoken("driver_back").size)
+        // 30초가 지나 다시 내리면 알린다
+        rig.advance(20)
+        rig.set { copy(driverDoorOpen = true, driverSeatOccupied = false) }
+        rig.advance(3)
+        assertEquals(2, rig.spoken("driver_away").size)
+    }
+
+    @Test
     fun `출발 전에도 운전자가 내리면 알린다`() {
         val rig = Rig()
         rig.start()
         rig.advance(15)
         rig.clear()
         rig.set { copy(driverDoorOpen = true, driverSeatOccupied = false) }
+        rig.advance(3)
         assertEquals("driver_away", rig.spoken().single().situation)
     }
 
@@ -911,6 +983,7 @@ class CompanionEngineTest {
 
         rig.repeat()
         rig.set { copy(gear = Gear.PARK, driverDoorOpen = true, driverSeatOccupied = false) }
+        rig.advance(3) // 좌석 값이 2.5초 그대로여야 이탈로 본다. 그때 대답은 아직 하는 중이다
         val away = rig.spoken("driver_away").single()
         assertTrue("멈춤 안내는 대답을 끊는다", away.interrupt)
     }
@@ -1003,6 +1076,7 @@ class CompanionEngineTest {
 
         rig.advance(10)
         rig.set { copy(gear = Gear.PARK, driverDoorOpen = true, driverSeatOccupied = false) }
+        rig.advance(3)
         assertEquals(1, rig.spoken("driver_away").size)
     }
 
@@ -1259,6 +1333,7 @@ class CompanionEngineTest {
         assertEquals("거의 다 왔어요", cardLine())
         set { copy(gear = Gear.PARK, nav = nav.copy(remainSec = 900)) }
         set { copy(driverDoorOpen = true, driverSeatOccupied = false) }
+        wait(3) // 좌석 값은 2.5초 그대로일 때 받는다
         assertEquals("따님이 곧 와요", cardLine())
         set { copy(driverSeatOccupied = true, driverDoorOpen = false) }
         wait(3)

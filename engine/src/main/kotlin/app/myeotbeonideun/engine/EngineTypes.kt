@@ -72,6 +72,10 @@ data class EngineParams(
     val stopRepeatMs: Long = 120_000,
     /** 운전자가 내려 있는 동안 다시 안심시키는 간격(명세: 60~90초). */
     val driverAwayRepeatMs: Long = 75_000,
+    /** 운전자 이탈에 다시 들어왔을 때 "내렸어요"를 다시 하기까지의 최소 간격(좌석 값 흔들림 대비). */
+    val awayReentryGapMs: Long = 30_000,
+    /** 좌석 점유 값이 바뀌면 이만큼 그대로일 때만 받는다(흔들림 완충). */
+    val seatDebounceMs: Long = 2_500,
     /** 주행 중 문이 계속 열려 있을 때 운전자에게 다시 알리는 간격. */
     val doorRepeatMs: Long = 15_000,
     /** 이 횟수만큼 알린 뒤로는 [doorSlowRepeatMs] 간격으로 늘린다(덜 닫힌 문으로 끝없이 울리지 않게). */

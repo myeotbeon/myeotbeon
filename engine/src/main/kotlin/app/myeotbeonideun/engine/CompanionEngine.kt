@@ -16,6 +16,7 @@ import app.myeotbeonideun.engine.script.ScriptBook
 import app.myeotbeonideun.engine.script.ScriptEngine
 import app.myeotbeonideun.engine.script.ScriptValidator
 import app.myeotbeonideun.engine.script.SlotValues
+import app.myeotbeonideun.engine.stop.Debounced
 import app.myeotbeonideun.engine.stop.StopClassifier
 import app.myeotbeonideun.engine.stop.StopInput
 import app.myeotbeonideun.engine.stop.StopReason
@@ -77,12 +78,23 @@ class CompanionEngine(
 
     // 멈춤 판단에 쓰는 시간 기록
     private var parkedSince: Long? = null
+    /** P단에 둔 뒤(또는 운전자가 돌아온 뒤) 운전석 문이 새로 열렸는지. 문 신호가 없으면 null */
     private var driverDoorOpenedSincePark: Boolean? = null
+    private var lastDriverDoorOpen: Boolean? = null
     private var stationarySince: Long? = null
     private var speedSeenMoving = false
     private var waypointAnnounced = false
-    private var awayNoticeAt = 0L
     private var stopNoticeAt: Long? = null
+
+    // 좌석 점유는 흔들림을 걸러 받는다(2.5초 그대로일 때만).
+    private val driverSeat = Debounced(params.seatDebounceMs)
+    private val passengerSeat = Debounced(params.seatDebounceMs)
+
+    // 운전자 이탈
+    /** 마지막으로 이탈 계열 안내를 한 때. */
+    private var awayNoticeAt: Long? = null
+    /** 이번 이탈에서 동승자에게 안내를 했는지. 하지 않았으면 돌아왔다는 말도 하지 않는다. */
+    private var awayAnnounced = false
 
     // 신호 반응(문·창문·안전띠). 한 번의 일(문 한 번 열림 등)마다 번호를 붙여, 되풀이 안내를 한 건으로 센다.
     private var doorAlertAt: Long? = null
@@ -337,12 +349,17 @@ class CompanionEngine(
 
     private fun updateTrackers(now: Long) {
         val s = signals
+        driverSeat.update(s.driverSeatOccupied, now)
+        passengerSeat.update(s.seatOccupied, now)
+        val driverDoorJustOpened = s.driverDoorOpen == true && lastDriverDoorOpen != true
+        lastDriverDoorOpen = s.driverDoorOpen
         if (s.motion == Motion.PARKED) {
             if (parkedSince == null) {
                 parkedSince = now
-                driverDoorOpenedSincePark = if (s.driverDoorOpen == null) null else false
+                driverDoorOpenedSincePark = s.driverDoorOpen // 열린 채 세웠으면 true, 문 신호가 없으면 null
+            } else if (driverDoorJustOpened) {
+                driverDoorOpenedSincePark = true
             }
-            if (s.driverDoorOpen == true) driverDoorOpenedSincePark = true
         } else {
             parkedSince = null
             driverDoorOpenedSincePark = null
@@ -439,7 +456,7 @@ class CompanionEngine(
         }
 
         // 안전띠: 부드러운 권유 두 번 뒤 운전자에게 알린다.
-        if (driving && s.seatBeltBuckled == false && s.seatOccupied != false) {
+        if (driving && s.seatBeltBuckled == false && passengerSeat.value != false) {
             val since = beltSince ?: now.also {
                 beltSince = it
                 beltStep = 0
@@ -540,9 +557,9 @@ class CompanionEngine(
                 stationaryForMs = stationarySince?.let { now - it },
                 parkedForMs = parkedSince?.let { now - it },
                 congested = s.nav.congested,
-                driverSeatOccupied = s.driverSeatOccupied,
+                driverSeatOccupied = driverSeat.value,
                 driverDoorOpenedSincePark = driverDoorOpenedSincePark,
-                passengerSeatOccupied = s.seatOccupied,
+                passengerSeatOccupied = passengerSeat.value,
                 nearDestination = driving && isNearDestination(),
                 navArrived = driving && navArrived,
                 farFromDestination = driving && navSaysFar(),
@@ -557,15 +574,27 @@ class CompanionEngine(
                 // 운전자가 차에 없으므로 '잠시 조용히'와 상관없이 말한다. 혼자 남은 때가 가장 불안하다.
                 waypointAnnounced = true
                 if (prev != StopReason.DRIVER_AWAY) {
+                    // 새 이탈. 마지막 이탈 안내에서 30초가 안 됐으면(좌석 값이 흔들려 다시 들어왔을 수 있다) 되풀이하지 않는다.
+                    awayAnnounced = false
+                    val last = awayNoticeAt
+                    if (last == null || now - last >= params.awayReentryGapMs) {
+                        awayNoticeAt = now
+                        awayAnnounced = true
+                        offer(stopCandidate("driver_away", now, StopReason.DRIVER_AWAY, ignoreQuiet = true), now, out)
+                    }
+                } else if (now - (awayNoticeAt ?: now) >= params.driverAwayRepeatMs) {
                     awayNoticeAt = now
-                    offer(stopCandidate("driver_away", now, StopReason.DRIVER_AWAY, ignoreQuiet = true), now, out)
-                } else if (now - awayNoticeAt >= params.driverAwayRepeatMs) {
-                    awayNoticeAt = now
+                    awayAnnounced = true
                     offer(stopCandidate("driver_away_again", now, StopReason.DRIVER_AWAY, ignoreQuiet = true), now, out)
                 }
             }
-            StopReason.DRIVER_BACK ->
-                offer(stopCandidate("driver_back", now, validWhile = null, ignoreQuiet = true), now, out)
+            StopReason.DRIVER_BACK -> {
+                // 내렸다고 알린 이탈일 때만 돌아왔다고 알린다(말없이 지나간 짧은 이탈 뒤에 "돌아왔어요"만 나오지 않게).
+                if (awayAnnounced) offer(stopCandidate("driver_back", now, validWhile = null, ignoreQuiet = true), now, out)
+                awayAnnounced = false
+                // 다음 이탈은 운전석 문이 새로 열려야 본다(앉은 채 좌석 값이 흔들려도 "내렸어요"라고 하지 않게).
+                if (s.driverDoorOpen != null) driverDoorOpenedSincePark = false
+            }
             // P단 정차는 한 번만 말한다. 내비가 넉넉히 남았다고 할 때만 "아직 다 온 건 아니에요"(경유지),
             // 그 밖에는 도착을 부정하지 않는 말("차를 세웠어요. 따님이 알려 드릴 때까지 앉아 계세요.")을 쓴다.
             StopReason.WAYPOINT_STOP, StopReason.PARKED_UNSURE ->

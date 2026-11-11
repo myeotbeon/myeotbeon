@@ -188,7 +188,8 @@ class ScreenshotTest {
     @Test
     fun `07 동행 중 - 운전자가 내림`() = shot("07_companion_driver_away", drivingShell.copy(restricted = false)) {
         Companion(
-            halfway().set { copy(gear = Gear.PARK, driverDoorOpen = true, driverSeatOccupied = false) }
+            // 좌석 값은 2.5초 그대로일 때 받으므로 3초 기다렸다가 그린다
+            halfway().set { copy(gear = Gear.PARK, driverDoorOpen = true, driverSeatOccupied = false) }.wait(3)
                 .ui("절반쯤", restricted = false),
         )
     }
