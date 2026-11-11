@@ -89,6 +89,35 @@ class UrgentAlertTest {
     }
 
     @Test
+    fun `안전띠 알림이 떠 있는 동안 주행 중 문이 열리면 앞의 것을 지우고 새 한 줄 알림으로 다시 띄운다`() {
+        // 같은 번호를 '한 번만 알림'으로 고쳐 올리면 시스템 UI 가 헤드업을 다시 띄우지 않는다(검토 NEW-5)
+        val c = app.container
+        drive()
+        c.demoSource.setBelt(SeatPosition.REAR_RIGHT, false)
+        idle(61_000) // 권유 두 번(0초, 30초) 뒤 60초에 운전자에게
+        val beltLine = "같이 탄 분 안전띠가 풀렸어요."
+        val belt = posted(TripNotifications.URGENT_ID)!!
+        assertEquals(beltLine, belt.title())
+        assertEquals("한 번만 알림 표시를 쓰지 않는다", 0, belt.flags and Notification.FLAG_ONLY_ALERT_ONCE)
+
+        idle(1_000)
+        door(true)
+        idle(500)
+        assertEquals(doorLine, c.trip.urgentLine)
+        val door = posted(TripNotifications.URGENT_ID)!!
+        assertEquals("더 급한 문 열림으로 바뀐다", doorLine, door.title())
+        assertTrue("새로 올린 알림이다", door.`when` > belt.`when`)
+        assertEquals(0, door.flags and Notification.FLAG_ONLY_ALERT_ONCE)
+        assertEquals("한 줄 알림은 하나만 남는다", 1, nm.activeNotifications.count { it.id == TripNotifications.URGENT_ID })
+
+        // 문이 닫히면 남은 안전띠 알림으로 돌아간다(다시 새로 올림)
+        door(false)
+        idle(500)
+        assertEquals(beltLine, posted(TripNotifications.URGENT_ID)!!.title())
+        c.trip.end()
+    }
+
+    @Test
     fun `급하지 않은 알림(창문)은 한 줄 알림으로 올리지 않는다`() {
         val c = app.container
         drive()

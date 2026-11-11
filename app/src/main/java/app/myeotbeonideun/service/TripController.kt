@@ -320,6 +320,7 @@ class TripController(private val context: Context, private val c: AppContainer) 
      * - 진행 중 알림의 글을 그 한 줄로 바꾸고, 풀리면 평소 글로 되돌린다.
      * - 앱이 화면 뒤에 있으면 중요도 높음 채널의 한 줄 알림(헤드업)으로도 낸다. 앱이 앞에 있거나 풀리면 지운다.
      * 같은 글은 다시 올리지 않는다(문이 열려 있는 동안 15초마다 오는 되풀이 알림은 알림음만 낸다).
+     * 다른 일로 바뀌면(안전띠 알림이 떠 있는 동안 주행 중 문 열림) 앞의 것을 지우고 새로 올려 헤드업이 다시 뜨게 한다(검토 NEW-5).
      */
     private fun syncAlerts() {
         if (engine == null) return
@@ -330,6 +331,7 @@ class TripController(private val context: Context, private val c: AppContainer) 
         }
         val wantHeadsUp = line != null && !c.foreground.value
         if (wantHeadsUp && line != headsUpShown) {
+            if (headsUpShown != null) TripNotifications.cancelUrgent(context)
             headsUpShown = line
             TripNotifications.showUrgent(context, line!!)
         } else if (!wantHeadsUp && headsUpShown != null) {

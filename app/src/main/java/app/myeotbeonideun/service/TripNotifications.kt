@@ -16,7 +16,9 @@ import app.myeotbeonideun.ui.MainActivity
  *   (주행 중 문 열림 등)이 떠 있는 동안은 그 한 줄로 바꾼다. 풀리면 되돌린다.
  * - 급한 알림(중요도 높음 채널의 한 줄 알림 = 헤드업): 급한 운전자 알림이 떠 있고 **앱이 화면 뒤에 있을 때만**
  *   한 번 띄운다(앱이 앞에 있으면 화면의 붉은 한 줄이 그 일을 한다). 풀리거나 앱이 앞으로 오면 지운다.
- *   같은 글은 다시 울리지 않고(setOnlyAlertOnce), 채널 소리는 끈다(소리는 앱이 내는 짧은 알림음 하나뿐).
+ *   같은 일의 되풀이로는 다시 올리지 않는다(TripController 가 가린다). 더 급한 일로 바뀌면(안전띠 → 주행 중 문) 지운 뒤 새로
+ *   올린다 — 같은 번호를 setOnlyAlertOnce 로 고쳐 올리면 시스템 UI 가 이미 알린 알림의 갱신으로 보고 헤드업을 다시 띄우지 않아,
+ *   더 급한 일이 글만 바뀌고 뜨지 않을 수 있다(검토 NEW-5). 채널 소리는 끈다(소리는 앱이 내는 짧은 알림음 하나뿐).
  *
  * AAOS·Pleos 의 제약(확인하지 못한 것)
  * - 알림을 어떻게 보일지는 차의 시스템 UI 가 정한다. 헤드업은 중요도 높음(IMPORTANCE_HIGH)에만 뜨고, 주행 중에는
@@ -88,7 +90,6 @@ object TripNotifications {
                     .setSmallIcon(R.drawable.ic_stat_companion)
                     .setContentTitle(line)
                     .setContentIntent(openApp(context))
-                    .setOnlyAlertOnce(true)
                     .setAutoCancel(true)
                     .setLocalOnly(true)
                     .build(),
