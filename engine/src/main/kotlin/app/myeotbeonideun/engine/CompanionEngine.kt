@@ -5,7 +5,6 @@ import app.myeotbeonideun.engine.journey.IntervalPolicy
 import app.myeotbeonideun.engine.journey.Stage
 import app.myeotbeonideun.engine.journey.StageCalculator
 import app.myeotbeonideun.engine.model.Motion
-import app.myeotbeonideun.engine.model.NavState
 import app.myeotbeonideun.engine.model.Purpose
 import app.myeotbeonideun.engine.model.Signals
 import app.myeotbeonideun.engine.model.TripConfig
@@ -52,9 +51,12 @@ class CompanionEngine(
     // 내비 값. 남은 시간의 단위는 초다(2026-11-11 Pleos Connect 에뮬레이터: 9분 경로 = 540).
     /** 받아들인 남은 시간. 0 은 남은 거리도 가까울 때만 받는다(경로가 바뀌는 순간의 기본값 0 같은 표본을 거른다). */
     private var acceptedRemainSec: Int? = null
+    /** 받아들인 남은 거리(미터로 가정). 0 이하는 도착 이벤트와 함께일 때만 받고, 아니면 앞의 값을 둔다. */
+    private var acceptedRemainMeters: Int? = null
     private var totalSec: Int? = null
-    private var lastNav: NavState? = null
-    /** 내비 값이 바뀐 횟수(표본 번호). */
+    /** 마지막으로 본 (남은 시간, 남은 거리). 이것이 바뀔 때만 새 표본으로 센다. */
+    private var lastRemain: Pair<Int?, Int?>? = null
+    /** 내비의 남은 시간·거리가 바뀐 횟수(표본 번호). 정체 표시처럼 다른 칸만 바뀐 것은 세지 않는다. */
     private var navSample = 0
     private var lastNavTotalSec: Int? = null
     /** 전체 시간이 크게 늘었다(새 경로). 구간을 앞뒤 따지지 않고 다시 정한다. */
@@ -67,6 +69,11 @@ class CompanionEngine(
     private var stageCandidateLastSample = -1
     /** 출발 순간의 구간처럼 따로 말하지 않고 반영만 할 후보인지. */
     private var stageCandidateSilent = false
+
+    // 목적지 근처(남은 시간·거리로 본 것)도 표본 하나로 믿지 않는다: 같은 판단이 표본 2개 연달아 또는 10초 이어질 때만.
+    private var nearSinceMs: Long? = null
+    private var nearSamples = 0
+    private var nearLastSample = -1
 
     // 도착: 한 번 도착으로 봤어도 다시 달리거나 남은 시간이 다시 늘면 거둔다.
     private var arrivalSource: ArrivalSource? = null
@@ -397,25 +404,35 @@ class CompanionEngine(
         } else {
             stationarySince = null
         }
-        updateNav()
+        updateNav(now)
     }
 
     /**
      * 내비 값을 받아들인다.
-     * - 남은 시간 0(또는 음수)은 남은 거리도 가까울 때나 도착 이벤트와 함께일 때만 받는다. 아니면 그 표본은 버린다.
+     * - 남은 시간·거리가 바뀔 때만 새 표본으로 센다(정체 표시만 바뀐 것은 구간 확인의 '두 번째 표본'이 아니다).
+     * - 남은 거리 0(또는 음수)은 경로가 바뀌는 순간의 기본값일 수 있어 도착 이벤트와 함께일 때만 받는다. 아니면 앞의 값을 둔다.
+     * - 남은 시간 0(또는 음수)은 남은 거리도 가까울 때(1~150m)나 도착 이벤트와 함께일 때만 받는다. 아니면 그 표본은 버린다.
      * - 전체 시간이 크게 늘면(5분과 4분의 1 가운데 큰 것 이상) 새 경로로 보고 구간을 다시 정하게 한다.
      */
-    private fun updateNav() {
+    private fun updateNav(now: Long) {
         val nav = signals.nav
-        if (nav != lastNav) {
+        val remainPair = nav.remainSec to nav.remainMeters
+        if (remainPair != lastRemain) {
             navSample++
-            lastNav = nav
+            lastRemain = remainPair
+        }
+        val m = nav.remainMeters
+        acceptedRemainMeters = when {
+            m == null -> null
+            m > 0 -> m
+            navArrived -> 0
+            else -> acceptedRemainMeters
         }
         val r = nav.remainSec
         acceptedRemainSec = when {
             r == null -> null
             r > 0 -> r
-            navArrived || (nav.remainMeters != null && nav.remainMeters <= ARRIVE_REMAIN_METERS) -> 0
+            navArrived || acceptedRemainMeters.let { it != null && it in 1..ARRIVE_REMAIN_METERS } -> 0
             else -> acceptedRemainSec
         }
         val navTotal = nav.totalSec?.takeIf { it > 0 }
@@ -429,6 +446,38 @@ class CompanionEngine(
             lastNavTotalSec = navTotal
         }
         acceptedRemainSec?.let { remain -> totalSec = maxOf(totalSec ?: 0, navTotal ?: 0, remain) }
+        updateNear(now)
+    }
+
+    /**
+     * 내비 표본 하나가 목적지 근처를 가리키는지. 남은 시간과 거리를 서로 확인한다.
+     * - 남은 시간 60초 이하: 남은 거리를 알면 300m 안일 때만(남은 2km 에 40초 같은 어긋난 표본을 거른다).
+     * - 남은 거리 150m 안(1m 이상): 남은 시간이 곧 도착 구간 안이거나 모를 때만. 남은 거리 0 은 도착 이벤트 없이는 받지 않는다.
+     */
+    private fun navSampleNear(): Boolean {
+        val remain = acceptedRemainSec
+        val meters = acceptedRemainMeters
+        val timeNear = remain != null && remain <= ARRIVE_REMAIN_SEC && (meters == null || meters <= NEAR_CROSSCHECK_METERS)
+        val metersNear = meters != null && meters in 1..ARRIVE_REMAIN_METERS &&
+            (remain == null || remain <= StageCalculator.SOON_SEC)
+        return timeNear || metersNear
+    }
+
+    /** 목적지 근처라는 표본이 몇 개, 언제부터 이어지는지 센다([isNearDestination] 이 쓴다). */
+    private fun updateNear(now: Long) {
+        if (!navSampleNear()) {
+            nearSinceMs = null
+            nearSamples = 0
+            return
+        }
+        if (nearSinceMs == null) {
+            nearSinceMs = now
+            nearSamples = 1
+            nearLastSample = navSample
+        } else if (navSample != nearLastSample) {
+            nearSamples++
+            nearLastSample = navSample
+        }
     }
 
     /** 문·창문·안전띠(명세 3.4). 주행 단일 때만 본다. */
@@ -581,7 +630,7 @@ class CompanionEngine(
                 driverSeatOccupied = driverSeat.value,
                 driverDoorOpenedSincePark = driverDoorOpenedSincePark,
                 passengerSeatOccupied = passengerSeat.value,
-                nearDestination = driving && isNearDestination(),
+                nearDestination = driving && isNearDestination(now),
                 navArrived = driving && navArrived,
                 farFromDestination = driving && navSaysFar(),
                 departed = driving,
@@ -802,13 +851,15 @@ class CompanionEngine(
 
     private fun elapsedSec(now: Long): Int = (((now - (departedAt ?: now)) / 1000).toInt()).coerceAtLeast(0)
 
-    private fun isNearDestination(): Boolean {
-        val nav = signals.nav
-        val remain = acceptedRemainSec
-        // 남은 거리는 남은 시간과 어긋나지 않을 때만 믿는다(거리 0 만 따로 오는 표본 대비).
-        val metersNear = nav.remainMeters != null && nav.remainMeters <= ARRIVE_REMAIN_METERS &&
-            (remain == null || remain <= StageCalculator.SOON_SEC)
-        return nav.nearDestination || (remain != null && remain <= ARRIVE_REMAIN_SEC) || metersNear
+    /**
+     * 목적지 근처인지(그 상태로 P단이면 도착). 근접 알림(도착 지점 300m 안에 들어옴)은 바로 믿는다. 내비 남은 시간·거리로 본
+     * 근처([navSampleNear])는 표본 하나로 믿지 않고, 같은 판단이 표본 2개 연달아 오거나 10초 이어질 때만 믿는다
+     * (구간 확인과 같은 기준). 잘못 들어온 표본 하나로 "다 왔어요"를 먼저 말했다가 거두지 않게(검토 결함 4).
+     */
+    private fun isNearDestination(now: Long): Boolean {
+        if (signals.nav.nearDestination) return true
+        val since = nearSinceMs ?: return false
+        return nearSamples >= params.stageConfirmSamples || now - since >= params.stageConfirmMs
     }
 
     /**
@@ -993,6 +1044,8 @@ class CompanionEngine(
         /** 남은 시간·거리가 이 안이고 P단이면 도착으로 본다. */
         const val ARRIVE_REMAIN_SEC = 60
         const val ARRIVE_REMAIN_METERS = 150
+        /** 남은 시간이 60초 안이어도 남은 거리를 알고 이보다 멀면 목적지 근처로 보지 않는다(시간과 거리를 서로 확인). */
+        const val NEAR_CROSSCHECK_METERS = 300
         /** 남은 시간으로 도착을 본 뒤 남은 시간이 이만큼 넘게 다시 늘면 도착을 거둔다. */
         const val REARM_REMAIN_INCREASE_SEC = 60
         /** P단 정차를 경유지로 보려면 남은 거리를 알 때 이보다 멀어야 한다. */

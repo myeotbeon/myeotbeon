@@ -38,7 +38,7 @@
 | 변속단·주행 규제 | Gear D → `CarUxRestrictions` 수신(activeRestrictions=80). 메뉴의 출발·기록·설정이 흐려지고(잠김) 동행·카드는 그대로 | 출발 판단, 정차 전용 화면 잠금 |
 | 속도 | `CAR_SPEED` 허용 창이 "몇 번이든에서 이 기기의 위치 정보에 액세스하도록 허용하시겠습니까?"로 뜬다(위치 권한 묶음). 가상 콘솔로 바꿀 수 있다 | 정지 판단(아래 2절) |
 | 내비 남은 시간 | **초.** 내장 내비에서 9분·1.9km 경로 → 개발자 패널 "남은 540초 / 전체 540초"(내비 내부 기록도 remainTime=501) | 구간 계산 |
-| 내비 남은 거리 | 단위를 확인하지 못했다(미터로 가정) | 남은 시간 0 표본 거르기, 경유지 판단(1km)의 보조 |
+| 내비 남은 거리 | 단위를 확인하지 못했다(미터로 가정) | 남은 시간 0 표본 거르기, 목적지 근처 확인(300m·150m), 경유지 판단(1km)의 보조 |
 | 내비 도착 이벤트 | **만들 수 없었다.** 이 에뮬레이터는 내비 위치가 움직이지 않는다(내보내는 NMEA 문장의 체크섬이 늘 틀려 내장 내비가 버림). 남은 시간은 재계산으로만 조금 준다(501→483초) | 내비 없이 간 길처럼 운전자가 '도착했어요'로 알린다 |
 | 위치 | FusedLocation 이 `adb emu geo fix` 위치를 받았다. 환경설정의 '위치 사용'은 SDK 지원 여부이고, `FUSED_LOCATION` 권한 허용 전에도 '사용'으로 보였다 | 근접 알림(`addProximityAlert`)은 확인하지 못했다 |
 | 말하기 | Pleos TextToSpeech(ON_DEVICE)가 기기 안 엔진(GAAS OnDevice, 화자 seoyoon, ko_KR, 22,050Hz)으로 소개말을 합성·재생 | 음성 엔진 표시 "Pleos TextToSpeech (ON_DEVICE)" |
@@ -106,8 +106,9 @@ Pleos Vehicle SDK 2.3.2 에는 속도·변속단 API 가 없습니다.
 - 초기화: `NaviHelper(context).initialize(onConnected, onFailed)` → `addListener`. 연결에 실패하면 그 객체를 놓고 새 객체로 다시 시도합니다.
 - `getDestinationInfo()`·`getRouteStateInfo()` 는 값을 돌려주지 않고 콜백으로 줍니다. 그래서 내비가 연결된 동안, 동행 중에만 30초마다 다시 묻습니다
   (차량 신호 가운데 주기적으로 묻는 것은 이것 하나입니다).
-- 엔진은 표본 하나를 그대로 믿지 않습니다: 남은 시간 0 은 남은 거리도 150m 안이거나 도착 이벤트와 함께일 때만 받고, 구간은 같은 구간을
-  가리키는 표본이 2개 연달아 오거나 10초 이어질 때만 앞으로 갑니다(`docs/architecture.md` 구간 절).
+- 엔진은 표본 하나를 그대로 믿지 않습니다: 남은 거리 0 은 도착 이벤트 없이는 받지 않고, 남은 시간 0 은 남은 거리가 1~150m 이거나 도착
+  이벤트와 함께일 때만 받습니다. 구간과 목적지 근처는 같은 판단이 표본 2개 연달아 오거나 10초 이어질 때만 믿고, 남은 시간이 작아도 남은
+  거리가 300m 넘게 남았으면 근처로 보지 않습니다(`docs/architecture.md` 구간 절).
 - 문서: `…/connect-sdk-pleos/NaviHelper/event-listeners`, `…/NaviHelper/destinations`, `…/NaviHelper/initialization-and-release`, `…/NaviHelper/declaring-permissions`,
   `…/connect-sdk-pleos/NaviHelper/navi-helper/ai.pleos.playground.navi.helper.listener/navi-helper-event-listener/entry`
 

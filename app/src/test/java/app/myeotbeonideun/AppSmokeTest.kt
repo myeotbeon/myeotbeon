@@ -99,6 +99,7 @@ class AppFlowTest {
         assertNull(snapshot().quietUntilMs)
 
         c.demoSource.setNav { it.copy(remainSec = 20, remainMeters = 60) }
+        idle(2) // 목적지 앞을 몇 초 더 달려 '근처' 표본이 이어진 뒤(표본 하나로는 도착으로 보지 않는다)
         c.demoSource.update { it.copy(gear = Gear.PARK) }
         idle(2)
         assertEquals(Phase.ARRIVED, snapshot().phase)
@@ -133,6 +134,7 @@ class AppFlowTest {
         c.demoSource.update { it.copy(gear = Gear.DRIVE) }
         idle(30)
         c.demoSource.setNav { it.copy(remainSec = 40, remainMeters = 100) }
+        idle(2)
         c.demoSource.update { it.copy(gear = Gear.PARK) } // 목적지 앞 약국에 잠깐 섰다
         idle(2)
         assertEquals(Phase.ARRIVED, snapshot().phase)

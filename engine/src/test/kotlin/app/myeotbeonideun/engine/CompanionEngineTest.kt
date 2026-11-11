@@ -351,7 +351,92 @@ class CompanionEngineTest {
         rig.advance(10)
         assertNotEquals("가짜 0 으로 도착하지 않는다", Phase.ARRIVED, rig.snapshot().phase)
         rig.nav { copy(remainSec = 0, remainMeters = 40) } // 남은 거리도 가까우면 받는다
+        assertNotEquals("표본 하나로는 도착으로 보지 않는다", Phase.ARRIVED, rig.snapshot().phase)
+        rig.advance(10) // 같은 판단이 10초 이어지면
         assertEquals(Phase.ARRIVED, rig.snapshot().phase)
+    }
+
+    @Test
+    fun `남은 거리 0 과 남은 시간 0 이 함께 와도 도착 이벤트 없이는 도착으로 보지 않는다`() {
+        // 경로를 찾는 동안의 기본값(0초·0m) 같은 표본(검토 결함 4)
+        val rig = Rig()
+        rig.startAndDepart()
+        rig.clear()
+        rig.nav { copy(remainSec = 0, remainMeters = 0) }
+        rig.nav { copy(remainSec = 0, remainMeters = 0, congested = true) }
+        rig.set { copy(gear = Gear.PARK) }
+        rig.advance(30)
+        assertNotEquals(Phase.ARRIVED, rig.snapshot().phase)
+        assertTrue(rig.spoken("arrive").isEmpty())
+        assertEquals("남은 거리 0 은 넉넉히 남았다는 근거도 아니므로 도착을 부정하지 않는 정차 문장", 1, rig.spoken("stop_parked_neutral").size)
+        // 내비 도착 이벤트가 오면 그때 도착이다
+        rig.set { copy(gear = Gear.DRIVE) }
+        rig.navArrived()
+        assertEquals(Phase.ARRIVED, rig.snapshot().phase)
+    }
+
+    @Test
+    fun `남은 시간이 작아도 남은 거리가 멀면 목적지 근처로 보지 않는다`() {
+        val rig = Rig()
+        rig.startAndDepart()
+        rig.clear()
+        rig.nav { copy(remainSec = 40, remainMeters = 2_000) } // 어긋난 표본: 2km 에 40초
+        rig.nav { copy(remainSec = 38, remainMeters = 1_980) }
+        rig.set { copy(gear = Gear.PARK) }
+        rig.advance(30)
+        assertNotEquals(Phase.ARRIVED, rig.snapshot().phase)
+        assertTrue("'다 왔어요'를 먼저 말하지 않는다", rig.spoken("arrive").isEmpty())
+        // 거리도 300m 안이면 근처다(두 번째 표본으로 확인)
+        rig.set { copy(gear = Gear.DRIVE) }
+        rig.nav { copy(remainSec = 30, remainMeters = 250) }
+        rig.nav { copy(remainSec = 25, remainMeters = 200) }
+        rig.set { copy(gear = Gear.PARK) }
+        assertEquals(Phase.ARRIVED, rig.snapshot().phase)
+    }
+
+    @Test
+    fun `목적지 근처라는 표본 하나로는 도착하지 않고 두 번째 표본이나 10초 뒤에 도착한다`() {
+        val a = Rig()
+        a.startAndDepart()
+        a.clear()
+        a.nav { copy(remainSec = 30, remainMeters = 100) }
+        a.set { copy(gear = Gear.PARK) }
+        a.advance(4)
+        assertNotEquals("표본 하나", Phase.ARRIVED, a.snapshot().phase)
+        assertTrue(a.spoken("arrive").isEmpty())
+        a.nav { copy(remainSec = 25, remainMeters = 90) } // 두 번째 표본
+        assertEquals(Phase.ARRIVED, a.snapshot().phase)
+        assertEquals(listOf("arrive"), a.spoken().map { it.situation })
+
+        val b = Rig()
+        b.startAndDepart()
+        b.nav { copy(remainSec = 30, remainMeters = 100) }
+        b.advance(9)
+        b.set { copy(gear = Gear.PARK) }
+        assertNotEquals(Phase.ARRIVED, b.snapshot().phase)
+        b.advance(1) // 같은 판단이 10초 이어짐
+        assertEquals(Phase.ARRIVED, b.snapshot().phase)
+
+        // 근접 알림(기억한 도착 지점 300m 안)은 표본이 아니라 바로 믿는다
+        val c = Rig()
+        c.signals = c.signals.copy(nav = NavState())
+        c.startAndDepart()
+        c.nav { copy(nearDestination = true) }
+        c.set { copy(gear = Gear.PARK) }
+        assertEquals(Phase.ARRIVED, c.snapshot().phase)
+    }
+
+    @Test
+    fun `정체 표시만 바뀐 것은 새 표본으로 세지 않는다`() {
+        val rig = Rig()
+        rig.startAndDepart()
+        rig.clear()
+        rig.nav { copy(remainSec = 1400) }
+        rig.nav { copy(congested = true) } // 남은 시간은 그대로
+        rig.nav { copy(congested = false) }
+        assertEquals("같은 표본이라 아직 구간을 바꾸지 않는다", Stage.JUST_DEPARTED, rig.snapshot().stage)
+        rig.nav { copy(remainSec = 1390) } // 두 번째 표본
+        assertEquals(Stage.HALF, rig.snapshot().stage)
     }
 
     @Test
@@ -612,6 +697,7 @@ class CompanionEngineTest {
         val rig = Rig(TripConfig(place = "큰딸 집", interval = IntervalMode.FIVE_MIN))
         rig.startAndDepart()
         rig.nav { copy(remainSec = 50, remainMeters = 140) }
+        rig.nav { copy(remainSec = 45, remainMeters = 130) }
         rig.set { copy(gear = Gear.PARK) } // 목적지 앞 약국에 잠깐 섰다
         assertEquals(Phase.ARRIVED, rig.snapshot().phase)
         rig.advance(30)
@@ -655,7 +741,8 @@ class CompanionEngineTest {
     fun `남은 시간으로 도착을 봤는데 같은 경로의 남은 시간이 다시 늘면 도착을 거둔다`() {
         val rig = Rig()
         rig.startAndDepart()
-        rig.nav { copy(remainSec = 40, remainMeters = 2_000) } // 잘못 들어온 작은 남은 시간
+        rig.nav { copy(remainSec = 40, remainMeters = 140) } // 목적지 앞(두 표본으로 확인)
+        rig.nav { copy(remainSec = 38, remainMeters = 130) }
         rig.set { copy(gear = Gear.PARK) }
         assertEquals(Phase.ARRIVED, rig.snapshot().phase)
         rig.clear()
@@ -695,6 +782,7 @@ class CompanionEngineTest {
         val near = Rig()
         near.startAndDepart()
         near.nav { copy(remainSec = 30, remainMeters = 100) }
+        near.nav { copy(remainSec = 25, remainMeters = 90) }
         near.set { copy(gear = Gear.PARK) }
         assertEquals(listOf(ArrivalSource.NEAR_DESTINATION), near.arrivals())
         assertEquals(Phase.ARRIVED, near.snapshot().phase)
@@ -1575,6 +1663,7 @@ class CompanionEngineTest {
         set { copy(driverSeatOccupied = true, driverDoorOpen = false) }
         wait(3)
         set { copy(gear = Gear.DRIVE, nav = nav.copy(remainSec = 30)) }
+        wait(10) // 목적지 근처도 표본 하나로는 믿지 않는다(10초 이어짐)
         set { copy(gear = Gear.PARK) }
         assertEquals("큰딸 집에 다 왔어요", cardLine())
     }
