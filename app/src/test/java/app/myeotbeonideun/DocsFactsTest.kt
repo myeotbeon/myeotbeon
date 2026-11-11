@@ -105,6 +105,18 @@ class DocsFactsTest {
     }
 
     @Test
+    fun `README 의 헤드업 대상은 엔진이 급하다고 내는 운전자 알림을 모두 적는다`() {
+        // 엔진 소스에서 급한(urgent = true) 운전자 알림 상황을 모은다(검토 NEW-9 — 안전띠가 빠져 있었다).
+        val engine = text("engine/src/main/kotlin/app/myeotbeonideun/engine/CompanionEngine.kt")
+        val urgent = URGENT_NOTIFY.findAll(engine).map { it.groupValues[1] }.toSet()
+        assertEquals("급한 운전자 알림 상황이 바뀌면 README 문구 표도 함께 정한다", URGENT_NOTICE_WORDS.keys, urgent)
+        val bullet = readme.lines().first { it.startsWith("- **운전자 알림**") }
+        for ((situation, words) in URGENT_NOTICE_WORDS) {
+            assertMentions(bullet, "README '운전자 알림'", words, "헤드업 대상($situation)")
+        }
+    }
+
+    @Test
     fun `문서가 가리키는 저장소 안의 파일이 있다`() {
         val missing = mutableListOf<String>()
         var checked = 0
@@ -135,6 +147,17 @@ class DocsFactsTest {
         private val LINK = Regex("""\]\(([^)#\s]+)\)""")
         /** 백틱 안의 저장소 경로(docs/, tools/, app/, engine/, apk/ 로 시작, 줄임표·자리표시 없는 것). */
         private val CODE_PATH = Regex("""`((?:docs|tools|app|engine|apk)/[^`\s<>…*]+)`""")
+
+        /** 엔진이 급한 운전자 알림을 내는 줄: notify("상황", urgent = true, …). */
+        private val URGENT_NOTIFY = Regex("""notify\("([a-z_]+)", urgent = true""")
+
+        /** 급한 운전자 알림 상황 → README '운전자 알림' 줄에 있어야 하는 말. */
+        private val URGENT_NOTICE_WORDS = mapOf(
+            "door_open_d" to "주행 중 문 열림",
+            "away_door_d" to "운전자가 없는 동안의 문·자리",
+            "away_seat_d" to "운전자가 없는 동안의 문·자리",
+            "belt_off_d" to "안전띠",
+        )
 
         /** 고친 옛 주장의 특징적인 조각 → 왜 틀렸는지. */
         private val STALE = mapOf(
