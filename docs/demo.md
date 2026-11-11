@@ -27,7 +27,8 @@ adb shell am start -n app.myeotbeonideun/.ui.MainActivity
 ### 가상 콘솔을 바꾸는 두 방법
 
 1. **브라우저 페이지**: `http://127.0.0.1:8088/` 에서 기어·페달·문·창문·좌석 점유를 누릅니다.
-2. **시연 도우미(HTTP, adb 없음)**: `python tools/demo_console.py` — 아래 표의 순서를 단계마다 Enter 로 보냅니다(`s` 건너뛰기, `q` 끝내기,
+2. **시연 도우미(HTTP, adb 없음)**: [`tools/demo_console.py`](../tools/demo_console.py). `python tools/demo_console.py` 로 실행해
+   아래 표의 순서를 단계마다 Enter 로 보냅니다(`s` 건너뛰기, `q` 끝내기,
    `--from N` N단계부터, `--list` 목록, `--dry-run` 보내지 않고 보기). 앱의 버튼(동행 시작, 다시 말씀드리기, 도착했어요)은 사람이 누릅니다.
    단계마다 콘솔의 지금 값(`GET /vehicle/state`)을 한 줄로 보입니다. `python tools/demo_console.py --selftest` 는 이 PC 안의 가짜 콘솔로
    도우미 자체를 시험합니다(에뮬레이터가 필요 없음). Python 3.8 이상, 표준 라이브러리만 씁니다.

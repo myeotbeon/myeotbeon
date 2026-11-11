@@ -5,7 +5,10 @@ import app.myeotbeonideun.engine.model.Motion
 /** 차가 멈춘 이유. 어르신은 신호 대기·정체·잠깐 정차를 '도착'과 구별하기 어렵다(명세 3.3). */
 enum class StopReason(val situation: String?) {
     NONE(null),
-    /** 주행 단인데 20초 넘게 서 있다. */
+    /**
+     * 주행 단인데 20초 넘게 서 있다. '서 있음'은 속도 신호가 살아 있으면 속도로, 아니면 브레이크를 밟고 있는 것으로 본다
+     * (CompanionEngine — 속도 권한이 없으면 서행 중 브레이크도 '서 있음'이고, 오토홀드로 발을 떼고 서 있으면 모른다).
+     */
     SIGNAL_WAIT("stop_signal"),
     /** 서 있고, 내비가 경로에 정체가 있다고 알려 줬다. */
     TRAFFIC("stop_traffic"),
