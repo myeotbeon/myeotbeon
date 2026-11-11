@@ -157,6 +157,7 @@ fun MyeotbeonApp(
                     onRequestSpeedPermission = onNeedSpeedPermission,
                     onClearAll = vm::clearAll,
                     onOpenDevPanel = { vm.navigate(Screen.DEV) },
+                    onSeatReading = vm::setSeatReading,
                 )
             }
 

@@ -103,6 +103,8 @@ class AppContainer(
 
     init {
         demoSource.start()
+        // 환경설정의 '좌석 값 읽기'(자동·그대로·반대로)를 실차 신호에 알린다.
+        scope.launch { store.settings.map { it.seatReading }.distinctUntilChanged().collect { vehicleSource.setSeatReading(it) } }
         // 차량 신호 구독은 '화면이 보이거나 동행 중'일 때만 둔다. 백그라운드에서 동행이 없으면 놓는다
         // (Pleos 가이드: 백그라운드의 불필요한 센서 수집 정리).
         scope.launch { foreground.collect { syncVehicleSubscription() } }

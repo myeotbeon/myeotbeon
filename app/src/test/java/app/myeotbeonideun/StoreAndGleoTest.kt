@@ -14,6 +14,7 @@ import app.myeotbeonideun.engine.record.TripRecord
 import app.myeotbeonideun.gleo.Gleo
 import app.myeotbeonideun.gleo.GleoParams
 import app.myeotbeonideun.signal.PleosSignalSource
+import app.myeotbeonideun.signal.SeatReading
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -75,23 +76,29 @@ class AppStoreTest {
         val store = AppStore(context)
         store.saveRoute(config, false, 1_000)
         store.addRecord(TripRecord(5_000, 600, TripCounts(1)))
-        store.updateSettings { it.copy(listenEnabled = true, audioZoneId = 2) }
+        store.updateSettings { it.copy(listenEnabled = true, audioZoneId = 2, seatReading = SeatReading.AS_IS) }
         store.clearAll()
         val fresh = AppStore(context)
         assertTrue(fresh.routes.value.isEmpty())
         assertTrue(fresh.records.value.isEmpty())
         assertFalse(fresh.settings.value.listenEnabled)
         assertNull(fresh.settings.value.audioZoneId)
+        assertEquals(SeatReading.AUTO, fresh.settings.value.seatReading)
         assertTrue(context.getSharedPreferences("myeotbeon", Context.MODE_PRIVATE).all.isEmpty())
     }
 
     @Test
     fun `환경설정을 저장하고 다시 읽는다`() {
-        AppStore(context).updateSettings { it.copy(demoMode = true, windowThresholdPercent = 40, audioZoneId = 1) }
+        AppStore(context).updateSettings {
+            it.copy(demoMode = true, windowThresholdPercent = 40, audioZoneId = 1, seatReading = SeatReading.INVERTED)
+        }
         val s = AppStore(context).settings.value
         assertTrue(s.demoMode)
         assertEquals(40, s.windowThresholdPercent)
         assertEquals(1, s.audioZoneId)
+        assertEquals(SeatReading.INVERTED, s.seatReading)
+        // 처음에는 자동(운전석 기준)
+        assertEquals(SeatReading.AUTO, app.myeotbeonideun.data.Settings().seatReading)
     }
 }
 

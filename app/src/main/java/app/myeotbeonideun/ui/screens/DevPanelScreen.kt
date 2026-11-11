@@ -37,6 +37,10 @@ data class DevPanelUi(
     val scenarioStep: String? = null,
     /** 차량 연결 과정의 기록(차량 모드). */
     val diagnostics: List<String> = emptyList(),
+    /** 좌석 값을 지금 어떻게 읽는지(차량 모드). 위의 좌석 칩은 이 해석을 거친 값이다. */
+    val seatReadingLine: String? = null,
+    /** SDK 가 넘긴 그대로의 좌석 점유·안전띠 값(차량 모드). */
+    val rawValuesLine: String? = null,
 )
 
 /** 개발자 패널에서 하는 조작. */
@@ -175,6 +179,14 @@ fun DevPanelScreen(ui: DevPanelUi, actions: DevPanelActions, modifier: Modifier 
                 ),
                 style = AppType.small, color = colors.textSoft,
             )
+        }
+
+        if (ui.seatReadingLine != null || ui.rawValuesLine != null) {
+            Panel {
+                SectionTitle(stringResource(R.string.dev_seat_values))
+                ui.seatReadingLine?.let { Text(it, style = AppType.body, color = colors.text) }
+                ui.rawValuesLine?.let { Text(it, style = AppType.small, color = colors.textSoft) }
+            }
         }
 
         if (ui.diagnostics.isNotEmpty()) {

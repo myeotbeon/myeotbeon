@@ -36,6 +36,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import app.myeotbeonideun.engine.model.NavState
 import app.myeotbeonideun.engine.model.SeatPosition
 import app.myeotbeonideun.engine.model.VehicleState
@@ -70,6 +71,8 @@ import kotlinx.coroutines.flow.update
  * - 구독은 앱이 정한 때(화면이 보이거나 동행 중)에만 둔다. [start] 마다 새 세대([SignalSession])를 만들고,
  *   옛 세대의 콜백은 무시한다. [stop] 은 리스너를 바로 풀고, SDK 객체는 기다리던 비동기 콜백이 모두 돌아온 뒤에
  *   놓는다(Pleos 문서: 비동기 콜백이 끝나기 전에 release 하지 말 것).
+ * - 좌석 점유 Boolean 은 그대로 쓰지 않고 해석한다([SeatValueReader] — 2026-11-11 에뮬레이터에서 가상 콘솔과
+ *   반대로 왔고, 실차의 극성은 모른다). 안전띠는 극성을 확인하지 못해 그대로 쓴다.
  * - 콜백은 어느 스레드에서 올지 문서에 없어 메인 스레드로 옮겨 처리한다.
  */
 class PleosSignalSource(context: Context) : VehicleSignalSource {
@@ -89,6 +92,13 @@ class PleosSignalSource(context: Context) : VehicleSignalSource {
     override val state: StateFlow<VehicleState> = _state.asStateFlow()
     override val navEvents: SharedFlow<NavEvent> = _navEvents.asSharedFlow()
     override val diagnostics: StateFlow<List<String>> = _diagnostics.asStateFlow()
+
+    // 좌석 점유는 SDK 가 넘긴 값을 그대로 쓰지 않고 해석한다(에뮬레이터에서 콘솔과 반대로 왔다 — SeatValueReader).
+    private val seats = SeatValueReader()
+    private val _rawSeats = MutableStateFlow<Map<SeatPosition, Boolean>>(emptyMap())
+    private val _seatInterpretation = MutableStateFlow(seats.interpretation)
+    override val rawSeatOccupied: StateFlow<Map<SeatPosition, Boolean>> = _rawSeats.asStateFlow()
+    override val seatInterpretation: StateFlow<SeatInterpretation> = _seatInterpretation.asStateFlow()
 
     /** 지금의 구독(세대). 멈추면 null. */
     private var session: Session? = null
@@ -146,8 +156,35 @@ class PleosSignalSource(context: Context) : VehicleSignalSource {
         routing = false
         _status.value = SourceStatus.IDLE
         _capabilities.value = Capabilities()
-        // 놓은 뒤의 값은 모른다. 다시 붙이면 getCurrent* 로 새로 받는다.
+        // 놓은 뒤의 값은 모른다. 다시 붙이면 getCurrent* 로 새로 받는다(좌석 값의 해석은 같은 차의 성질이라 남긴다).
+        seats.clearRaw()
         _state.value = VehicleState()
+        publishSeats()
+    }
+
+    // ───────────────────────── 좌석 값 해석 ─────────────────────────
+
+    override fun setSeatReading(reading: SeatReading) {
+        seats.setReading(reading)
+        publishSeats()
+    }
+
+    override fun noteDriverAtScreen() {
+        seats.driverAtScreen()
+        publishSeats()
+    }
+
+    private fun setSeatOccupied(position: SeatPosition, occupied: Boolean?) {
+        seats.setRaw(position, occupied, SystemClock.elapsedRealtime())
+        publishSeats()
+    }
+
+    /** 원시 값과 해석을 내보내고, 상태의 좌석 점유를 해석한 값으로 바꾼다. */
+    private fun publishSeats() {
+        _rawSeats.value = seats.raw
+        _seatInterpretation.value = seats.interpretation
+        val occupied = seats.seatOccupied
+        _state.update { if (it.seatOccupied == occupied) it else it.copy(seatOccupied = occupied) }
     }
 
     /** 속도 권한을 새로 받았다. AAOS Car API 만 다시 붙인다(다른 신호와 동행 중의 값은 그대로 둔다). */
@@ -283,10 +320,6 @@ class PleosSignalSource(context: Context) : VehicleSignalSource {
         } catch (t: Throwable) {
             failed(t.javaClass.simpleName)
         }
-    }
-
-    private fun setSeatOccupied(position: SeatPosition, occupied: Boolean?) {
-        _state.update { it.copy(seatOccupied = it.seatOccupied.with(position, occupied)) }
     }
 
     private fun watchSeatBelt(s: Session, v: Vehicle, attempt: Int) {
@@ -673,11 +706,14 @@ class PleosSignalSource(context: Context) : VehicleSignalSource {
     }
 
     /**
-     * 남은 시간은 콜백으로만 온다(NaviHelper 의 get*Info 는 값을 돌려주지 않는다).
-     * 동행 중에만 30초마다 다시 묻고, 동행이 끝나면 묻지 않는다.
+     * 동행이 시작되거나 끝났다.
+     * - 좌석 값 자동 판별: 동행 시작 순간에는 운전석에 사람이 있으므로 그때 정하고 끝날 때까지 바꾸지 않는다.
+     * - 남은 시간은 콜백으로만 온다(NaviHelper 의 get*Info 는 값을 돌려주지 않는다). 동행 중에만 30초마다 다시 묻는다.
      */
     override fun setTripActive(active: Boolean) {
         tripActive = active
+        if (active) seats.holdForTrip(SystemClock.elapsedRealtime()) else seats.releaseTrip()
+        publishSeats()
         schedulePoll()
         if (!active) watchArrivalPoint(null)
     }

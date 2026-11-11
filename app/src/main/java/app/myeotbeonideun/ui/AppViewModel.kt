@@ -18,9 +18,15 @@ import app.myeotbeonideun.engine.script.ScriptEngine
 import app.myeotbeonideun.engine.script.SlotValues
 import app.myeotbeonideun.service.TripUi
 import app.myeotbeonideun.signal.DemoSignalSource
+import app.myeotbeonideun.signal.DrivingLock
 import app.myeotbeonideun.signal.PleosSignalSource
+import app.myeotbeonideun.signal.SeatInterpretation
+import app.myeotbeonideun.signal.SeatPolarity
+import app.myeotbeonideun.signal.SeatPolarityBasis
+import app.myeotbeonideun.signal.SeatReading
 import app.myeotbeonideun.signal.SourceKind
 import app.myeotbeonideun.signal.SourceStatus
+import app.myeotbeonideun.speech.ListenState
 import app.myeotbeonideun.ui.screens.CompanionUi
 import app.myeotbeonideun.ui.screens.DevPanelActions
 import app.myeotbeonideun.ui.screens.DevPanelUi
@@ -93,7 +99,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app), DevPanelActions {
     private val _speedGranted = MutableStateFlow(checkSpeedPermission())
 
     init {
-        // 좌석 신호와 내비 목적지로 빈칸을 미리 채운다(명세 3.1).
+        // 좌석 값 자동 판별: 운전자가 화면을 조작하는 출발 전 설정(P단)에서는 운전석에 사람이 있다.
+        // 그동안 운전석 원시 값으로 그대로·반대로를 정한다(동행 중에는 바꾸지 않는다). 빈칸 채우기보다 먼저 둔다.
+        viewModelScope.launch {
+            combine(_screen, c.foreground, c.trip.ui, c.vehicleSource.state) { screen, foreground, trip, v ->
+                screen == Screen.SETUP && foreground && trip == null && DrivingLock.parkedForCalibration(v)
+            }.collect { driverAtScreen -> if (driverAtScreen) c.vehicleSource.noteDriverAtScreen() }
+        }
+        // 좌석 신호와 내비 목적지로 빈칸을 미리 채운다(명세 3.1). 좌석 값은 해석한 값이다.
         viewModelScope.launch { vehicle.collect(::autoFill) }
         // 동행이 시작되면 동행 화면으로, 끝나면 기록 화면으로 간다.
         viewModelScope.launch {
@@ -157,6 +170,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app), DevPanelActions {
 
     fun startRoute(route: SavedRoute) {
         // 저장된 길은 한 번 눌러 시작한다. 자리는 지금 사람이 앉은 자리로 맞춘다.
+        // 운전자가 이 화면을 누르는 순간이므로 좌석 값 해석을 먼저 지금 운전석 값으로 맞춘다(자동일 때).
+        c.vehicleSource.noteDriverAtScreen()
         val occupied = c.source.value.state.value.occupiedPassengerSeats()
         val seat = if (occupied.isNotEmpty() && route.config.seat !in occupied) occupied.first() else route.config.seat
         _form.value = SetupForm.from(route).copy(seat = seat)
@@ -259,23 +274,51 @@ class AppViewModel(app: Application) : AndroidViewModel(app), DevPanelActions {
 
     // ───────────────────────── 환경설정 ─────────────────────────
 
+    private data class SettingsExtras(
+        val listen: ListenState,
+        val speedGranted: Boolean,
+        val vehicleStatus: SourceStatus,
+        val seat: SeatInterpretation,
+    )
+
     val settings: StateFlow<SettingsUi> =
         combine(
             c.store.settings, sourceKind, capabilities, c.speech.engineName,
-            combine(c.listener.state, _speedGranted, c.vehicleSource.status) { listen, speed, status -> Triple(listen, speed, status) },
-        ) { settings, kind, cap, engine, (listen, speed, vehicleStatus) ->
+            combine(c.listener.state, _speedGranted, c.vehicleSource.status, c.vehicleSource.seatInterpretation, ::SettingsExtras),
+        ) { settings, kind, cap, engine, extras ->
             SettingsUi(
                 settings = settings,
                 isAutomotive = c.isAutomotive,
                 sourceKind = kind,
                 capabilities = cap,
                 speechEngine = engine,
-                listenState = listen,
-                speedPermissionGranted = speed,
+                listenState = extras.listen,
+                speedPermissionGranted = extras.speedGranted,
                 versionName = BuildConfig.VERSION_NAME,
-                vehicleStatus = vehicleStatus,
+                vehicleStatus = extras.vehicleStatus,
+                seatReadingLine = if (c.isAutomotive) seatReadingLine(extras.seat) else null,
             )
         }.stateIn(viewModelScope, SharingStarted.Eagerly, SettingsUi())
+
+    /** 좌석 값 읽기(자동·그대로·반대로). 정차 중에만 바꾼다. */
+    fun setSeatReading(reading: SeatReading) {
+        if (c.drivingRestricted.value) return
+        c.store.updateSettings { it.copy(seatReading = reading) }
+    }
+
+    /** "좌석 값: 반대로(운전석 기준 자동)" */
+    private fun seatReadingLine(i: SeatInterpretation): String {
+        val polarity = text(if (i.polarity == SeatPolarity.INVERTED) R.string.seat_polarity_inverted else R.string.seat_polarity_as_is)
+        val basis = text(
+            when (i.basis) {
+                SeatPolarityBasis.DRIVER_SEAT -> R.string.seat_basis_driver
+                SeatPolarityBasis.NO_DRIVER_VALUE -> R.string.seat_basis_no_driver
+                SeatPolarityBasis.MANUAL -> R.string.seat_basis_manual
+            },
+        )
+        val line = text(R.string.seat_reading_line, polarity, basis)
+        return if (i.heldForTrip) text(R.string.seat_reading_held, line) else line
+    }
 
     fun setDemoMode(on: Boolean) {
         if (c.trip.inProgress) c.trip.end() // 신호 출처가 바뀌므로 하던 동행은 끝낸다
@@ -311,16 +354,36 @@ class AppViewModel(app: Application) : AndroidViewModel(app), DevPanelActions {
     // ───────────────────────── 개발자 패널 ─────────────────────────
 
     val dev: StateFlow<DevPanelUi> =
-        combine(vehicle, sourceKind, c.trip.ui, c.demoSource.scenarioStep, c.vehicleSource.diagnostics) { v, kind, trip, step, notes ->
+        combine(
+            vehicle, sourceKind, c.trip.ui, c.demoSource.scenarioStep,
+            combine(c.vehicleSource.diagnostics, c.vehicleSource.rawSeatOccupied, c.vehicleSource.seatInterpretation) { notes, raw, seat ->
+                Triple(notes, raw, seat)
+            },
+        ) { v, kind, trip, step, (notes, raw, seat) ->
+            val vehicleMode = kind == SourceKind.VEHICLE
             DevPanelUi(
                 state = v,
                 seat = trip?.config?.seat ?: _form.value.seat,
                 editable = kind == SourceKind.DEMO,
                 tripActive = trip != null,
                 scenarioStep = step,
-                diagnostics = if (kind == SourceKind.VEHICLE) notes else emptyList(),
+                diagnostics = if (vehicleMode) notes else emptyList(),
+                // 차량 모드에서는 좌석 값의 해석과 SDK 원시 값(좌석 점유, 안전띠)을 함께 보인다.
+                seatReadingLine = if (vehicleMode) seatReadingLine(seat) else null,
+                rawValuesLine = if (vehicleMode) rawValuesLine(raw, v.beltBuckled) else null,
             )
         }.stateIn(viewModelScope, SharingStarted.Eagerly, DevPanelUi())
+
+    /** SDK 가 넘긴 그대로의 값. 좌석 점유는 해석 전, 안전띠는 해석하지 않는다(극성 미확인). */
+    private fun rawValuesLine(seats: Map<SeatPosition, Boolean>, belts: Map<SeatPosition, Boolean>): String {
+        fun list(values: Map<SeatPosition, Boolean>, positions: List<SeatPosition>) =
+            positions.joinToString(" · ") { "${it.label} ${values[it]?.toString() ?: "-"}" }
+        return text(
+            R.string.dev_raw_values,
+            list(seats, SeatPosition.entries),
+            list(belts, SeatPosition.PASSENGER_SEATS),
+        )
+    }
 
     private val demo: DemoSignalSource? get() = c.source.value as? DemoSignalSource
 

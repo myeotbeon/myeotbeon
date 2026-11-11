@@ -129,6 +129,18 @@
     <string name="cap_location">위치</string>
     <string name="settings_speech_engine">음성 엔진: %1$s</string>
     <string name="settings_speech_engine_none">준비 전</string>
+    <string name="settings_seat_reading">좌석 값 읽기</string>
+    <string name="seat_reading_auto">자동</string>
+    <string name="seat_reading_as_is">그대로</string>
+    <string name="seat_reading_inverted">반대로</string>
+    <string name="seat_reading_line">좌석 값: %1$s(%2$s)</string>
+    <string name="seat_reading_held">%1$s · 동행 중 고정</string>
+    <string name="seat_polarity_as_is">그대로</string>
+    <string name="seat_polarity_inverted">반대로</string>
+    <string name="seat_basis_driver">운전석 기준 자동</string>
+    <string name="seat_basis_no_driver">운전석 값 없음</string>
+    <string name="seat_basis_manual">직접 고름</string>
+    <string name="settings_seat_reading_note">차에 따라 좌석 신호의 사람 있음·없음이 반대로 올 수 있어요. 자동은 출발 전 설정(P단)과 동행을 시작할 때 운전석에 사람이 있다고 보고 정하고, 동행 중에는 바꾸지 않아요. 앉은 자리 고르기와 운전자가 내렸는지 판단에 이 값을 써요.</string>
     <string name="settings_speed_permission">속도 신호 허용하기</string>
     <string name="settings_speed_permission_note">허용하면 브레이크를 떼고 서 있을 때도 멈춤을 알 수 있어요</string>
     <string name="settings_clear">모두 지우기</string>
@@ -178,6 +190,8 @@
     <string name="dev_arrived">도착 알림 보내기</string>
     <string name="dev_nav_values">목적지 %1$s · 남은 %2$s초 / 전체 %3$s초</string>
     <string name="dev_diagnostics">연결 기록</string>
+    <string name="dev_seat_values">좌석 값</string>
+    <string name="dev_raw_values">원시 값(SDK) — 좌석 점유: %1$s / 안전띠(해석 없이 그대로): %2$s</string>
 
     <!-- 포그라운드 서비스 알림 -->
     <string name="service_channel">동행 중 안내</string>

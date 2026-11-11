@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import app.myeotbeonideun.R
 import app.myeotbeonideun.data.Settings
 import app.myeotbeonideun.signal.Capabilities
+import app.myeotbeonideun.signal.SeatReading
 import app.myeotbeonideun.signal.SourceKind
 import app.myeotbeonideun.signal.SourceStatus
 import app.myeotbeonideun.speech.ListenState
@@ -48,6 +49,8 @@ data class SettingsUi(
     val versionName: String = "",
     /** 실차 신호의 연결 상태(차량 신호로 돌 때 '차량 신호 없음'을 보인다). */
     val vehicleStatus: SourceStatus = SourceStatus.IDLE,
+    /** 좌석 값을 지금 어떻게 읽는지("좌석 값: 반대로(운전석 기준 자동)"). 차량용 기기가 아니면 null */
+    val seatReadingLine: String? = null,
 )
 
 /** 환경설정(정차 중에만): 체험 모드, 실험 기능, 개인정보 안내, 안전 안내, 지우기, 개발자 패널. */
@@ -62,6 +65,7 @@ fun SettingsScreen(
     onRequestSpeedPermission: () -> Unit,
     onClearAll: () -> Unit,
     onOpenDevPanel: () -> Unit,
+    onSeatReading: (SeatReading) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val colors = LocalAppColors.current
@@ -166,6 +170,23 @@ fun SettingsScreen(
                 stringResource(R.string.settings_speech_engine, ui.speechEngine ?: stringResource(R.string.settings_speech_engine_none)),
                 style = AppType.small, color = colors.textSoft,
             )
+            // 좌석 값 읽기: 차에 따라 사람 있음·없음이 반대로 올 수 있다(에뮬레이터에서 그랬다). 정차 중에만 바꾼다
+            // (이 화면은 주행 중에 잠긴다).
+            if (ui.seatReadingLine != null) {
+                Spacer(Modifier.height(4.dp))
+                SectionTitle(stringResource(R.string.settings_seat_reading))
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    listOf(
+                        SeatReading.AUTO to R.string.seat_reading_auto,
+                        SeatReading.AS_IS to R.string.seat_reading_as_is,
+                        SeatReading.INVERTED to R.string.seat_reading_inverted,
+                    ).forEach { (reading, label) ->
+                        ChoiceChip(stringResource(label), ui.settings.seatReading == reading, { onSeatReading(reading) })
+                    }
+                }
+                Text(ui.seatReadingLine, style = AppType.body, color = colors.text)
+                Text(stringResource(R.string.settings_seat_reading_note), style = AppType.small, color = colors.textSoft)
+            }
             if (ui.isAutomotive && !ui.speedPermissionGranted) {
                 BigButton(
                     text = stringResource(R.string.settings_speed_permission),

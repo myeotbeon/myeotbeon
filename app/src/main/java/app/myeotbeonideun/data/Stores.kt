@@ -9,6 +9,7 @@ import app.myeotbeonideun.engine.model.TripConfig
 import app.myeotbeonideun.engine.record.RecordAggregator
 import app.myeotbeonideun.engine.record.TripCounts
 import app.myeotbeonideun.engine.record.TripRecord
+import app.myeotbeonideun.signal.SeatReading
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -44,6 +45,8 @@ data class Settings(
     val audioZoneId: Int? = null,
     /** 처음 실행할 때의 안내를 읽었는지. */
     val noticeAccepted: Boolean = false,
+    /** 좌석 점유 값 읽기. 자동은 운전석 기준으로 그대로·반대로를 정한다(에뮬레이터에서 콘솔과 반대로 왔다). */
+    val seatReading: SeatReading = SeatReading.AUTO,
 )
 
 /**
@@ -114,6 +117,7 @@ class AppStore(context: Context) {
                 .put("windowThresholdPercent", s.windowThresholdPercent)
                 .put("audioZoneId", s.audioZoneId ?: JSONObject.NULL)
                 .put("noticeAccepted", s.noticeAccepted)
+                .put("seatReading", s.seatReading.name)
                 .toString(),
         ).apply()
     }
@@ -149,6 +153,7 @@ class AppStore(context: Context) {
             windowThresholdPercent = o.optInt("windowThresholdPercent", 30).coerceIn(10, 90),
             audioZoneId = if (o.isNull("audioZoneId")) null else o.optInt("audioZoneId"),
             noticeAccepted = o.optBoolean("noticeAccepted", false),
+            seatReading = enumOr(o.optString("seatReading"), SeatReading.AUTO),
         )
     }.getOrDefault(Settings())
 

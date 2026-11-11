@@ -44,6 +44,18 @@ class DrivingLockTest {
     }
 
     @Test
+    fun `좌석 값 자동 판별은 P단에서만 한다`() {
+        assertTrue(DrivingLock.parkedForCalibration(VehicleState(gear = Gear.PARK)))
+        assertTrue(DrivingLock.parkedForCalibration(VehicleState(gear = Gear.PARK, uxRestricted = true)))
+        assertFalse(DrivingLock.parkedForCalibration(VehicleState(gear = Gear.DRIVE, uxRestricted = false)))
+        assertFalse(DrivingLock.parkedForCalibration(VehicleState(gear = Gear.REVERSE)))
+        // 변속단을 모르면 주행 규제가 아닐 때만
+        assertTrue(DrivingLock.parkedForCalibration(VehicleState(gear = Gear.UNKNOWN, uxRestricted = false)))
+        assertTrue(DrivingLock.parkedForCalibration(VehicleState()))
+        assertFalse(DrivingLock.parkedForCalibration(VehicleState(gear = Gear.UNKNOWN, uxRestricted = true)))
+    }
+
+    @Test
     fun `정차 전용 화면은 체험 모드여도 실차 주행 중에 잠긴다`() {
         for (screen in Screen.entries.filter { it.parkedOnly }) {
             assertTrue(screen.name, ShellUi(screen = screen, restricted = true, demo = true, vehicleRestricted = true).locked)

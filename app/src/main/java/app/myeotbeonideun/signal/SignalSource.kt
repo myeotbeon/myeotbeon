@@ -1,5 +1,6 @@
 package app.myeotbeonideun.signal
 
+import app.myeotbeonideun.engine.model.SeatPosition
 import app.myeotbeonideun.engine.model.VehicleState
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -86,4 +87,22 @@ interface VehicleSignalSource : SignalSource {
 
     /** 속도 권한을 새로 받았다. 속도 신호만 다시 붙인다(다른 신호와 동행 중의 값은 그대로). */
     fun refreshSpeedPermission()
+
+    /**
+     * SDK 가 넘긴 그대로의 좌석 점유 값(해석 전). 개발자 패널에 보인다.
+     * [state] 의 seatOccupied 는 [seatInterpretation] 으로 해석한 값이다(앉은 자리 자동 선택·운전자 이탈 판단에 쓴다).
+     */
+    val rawSeatOccupied: StateFlow<Map<SeatPosition, Boolean>>
+
+    /** 좌석 점유 값을 지금 어떻게 읽는지(그대로·반대로, 무엇으로 정했는지). */
+    val seatInterpretation: StateFlow<SeatInterpretation>
+
+    /** 환경설정의 '좌석 값 읽기'(자동·그대로·반대로). */
+    fun setSeatReading(reading: SeatReading)
+
+    /**
+     * 운전자가 화면을 조작하는 출발 전 설정(P단)이다. 자동이면 지금 운전석 원시 값으로 해석을 정한다.
+     * 동행 중에는 바꾸지 않는다([setTripActive] 가 동행 시작 순간에 정하고 끝날 때까지 둔다).
+     */
+    fun noteDriverAtScreen()
 }
