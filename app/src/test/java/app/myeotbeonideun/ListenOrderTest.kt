@@ -6,11 +6,14 @@ import app.myeotbeonideun.engine.intent.PassengerIntent
 import app.myeotbeonideun.engine.model.Gear
 import app.myeotbeonideun.engine.model.TripConfig
 import app.myeotbeonideun.speech.FakeSpeaker
+import app.myeotbeonideun.speech.ListenPolicy
 import app.myeotbeonideun.speech.ListenState
 import app.myeotbeonideun.speech.PassengerListener
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -23,14 +26,14 @@ import java.time.Duration
 class FakeListener : PassengerListener {
     override val state: StateFlow<ListenState> = MutableStateFlow(ListenState.OFF)
     val calls = ArrayList<String>()
-    var onIntent: ((PassengerIntent) -> Unit)? = null
+    var onIntent: ((PassengerIntent) -> Boolean)? = null
     private var running = false
     private var paused = false
 
     /** 지금 듣고 있는지(시작했고 멈추지 않았다). */
     val listening: Boolean get() = running && !paused
 
-    override fun start(onIntent: (PassengerIntent) -> Unit) {
+    override fun start(onIntent: (PassengerIntent) -> Boolean) {
         calls += "start"
         this.onIntent = onIntent
         running = true
@@ -90,10 +93,29 @@ class ListenOrderTest {
         c.trip.start(TripConfig(place = "큰딸 집"))
         c.demoSource.update { it.copy(gear = Gear.DRIVE) }
         idle(15_000)
-        app.listener.onIntent!!.invoke(PassengerIntent.WHERE)
+        assertTrue("엔진이 받아 대답했다", app.listener.onIntent!!.invoke(PassengerIntent.WHERE))
         idle(6_000)
         assertEquals(1, c.trip.ui.value!!.snapshot.counts.answered)
         c.trip.end()
+    }
+
+    @Test
+    fun `잠시 조용히 중에 들은 물음은 대답하지 않았다고 돌려줘 같은 물음 쿨다운에 세지 않는다`() {
+        val c = app.container
+        c.store.updateSettings { it.copy(listenEnabled = true) }
+        c.trip.start(TripConfig(place = "큰딸 집"))
+        c.demoSource.update { it.copy(gear = Gear.DRIVE) }
+        idle(15_000)
+        c.trip.toggleQuiet()
+        val policy = ListenPolicy()
+        val ask = { at: Long -> policy.onResult(PassengerIntent.WHERE, at) { q -> app.listener.onIntent!!.invoke(q) } }
+        assertNull("조용히 중이라 대답하지 않았다", ask(0))
+        c.trip.toggleQuiet() // 운전자가 조용히를 풂
+        assertEquals("앞의 물음이 쿨다운을 잡아먹지 않아 바로 대답한다", PassengerIntent.WHERE, ask(5_000))
+        idle(6_000)
+        assertEquals(1, c.trip.ui.value!!.snapshot.counts.answered)
+        c.trip.end()
+        assertFalse("동행이 끝나면 대답하지 않는다", app.listener.onIntent!!.invoke(PassengerIntent.WHERE))
     }
 
     @Test

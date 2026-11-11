@@ -25,8 +25,11 @@ enum class ListenState { OFF, STARTING, LISTENING, UNAVAILABLE }
 interface PassengerListener {
     val state: StateFlow<ListenState>
 
-    /** 듣기를 시작한다. 물음의 종류를 알아냈을 때만 [onIntent] 를 부른다. */
-    fun start(onIntent: (PassengerIntent) -> Unit)
+    /**
+     * 듣기를 시작한다. 물음의 종류를 알아냈을 때만 [onIntent] 를 부른다. [onIntent] 는 엔진이 그 물음을 받아 대답했으면 true 를
+     * 돌려준다('잠시 조용히'라 대답하지 않았으면 false — 그 물음은 같은 물음 쿨다운에 세지 않는다).
+     */
+    fun start(onIntent: (PassengerIntent) -> Boolean)
 
     /** 차가 말하는 동안에는 듣지 않는다(제 목소리를 물음으로 알아듣지 않게). */
     fun pause()
@@ -53,7 +56,7 @@ class PleosPassengerListener(context: Context) : PassengerListener {
     override val state: StateFlow<ListenState> = _state.asStateFlow()
 
     private var stt: SpeechToText? = null
-    private var onIntent: ((PassengerIntent) -> Unit)? = null
+    private var onIntent: ((PassengerIntent) -> Boolean)? = null
     private var running = false
     private var paused = false
     private val policy = ListenPolicy()
@@ -84,8 +87,8 @@ class PleosPassengerListener(context: Context) : PassengerListener {
             main.post {
                 if (!running) return@post
                 // 완성된 결과가 왔다 = 정상 종료(오류 횟수 0). 같은 물음을 쿨다운 안에 또 들었으면 대답하지 않는다.
-                val accepted = policy.onResult(intent, SystemClock.elapsedRealtime())
-                if (accepted != null && !paused) onIntent?.invoke(accepted)
+                // 차가 말하는 중(paused)이거나 엔진이 대답하지 않은 물음은 쿨다운에 세지 않는다(ListenPolicy).
+                policy.onResult(intent, SystemClock.elapsedRealtime(), paused) { q -> onIntent?.invoke(q) ?: false }
             }
         }
 
@@ -112,7 +115,7 @@ class PleosPassengerListener(context: Context) : PassengerListener {
         }
     }
 
-    override fun start(onIntent: (PassengerIntent) -> Unit) {
+    override fun start(onIntent: (PassengerIntent) -> Boolean) {
         if (running) return
         this.onIntent = onIntent
         running = true

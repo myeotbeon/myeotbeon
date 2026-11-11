@@ -1540,6 +1540,23 @@ class CompanionEngineTest {
     }
 
     @Test
+    fun `잠시 조용히 중이거나 끝났으면 물음에 대답하지 않는다고 알려 준다`() {
+        // 음성 인식 쪽은 이것으로 '대답한 물음'만 같은 물음 쿨다운에 센다(검토 NEW-8)
+        val rig = Rig()
+        rig.startAndDepart()
+        assertTrue(rig.engine.acceptsQuestions(rig.now))
+        rig.quiet()
+        assertFalse(rig.engine.acceptsQuestions(rig.now))
+        rig.clear()
+        rig.ask(PassengerIntent.WHERE)
+        assertTrue(rig.spoken().isEmpty())
+        rig.engine.cancelQuiet()
+        assertTrue(rig.engine.acceptsQuestions(rig.now))
+        rig.engine.finish(rig.now)
+        assertFalse(rig.engine.acceptsQuestions(rig.now))
+    }
+
+    @Test
     fun `내비 없는 길에서 P단으로 서 있을 때 언제 도착하느냐고 물어도 아직 가는 길이라고 하지 않는다`() {
         // 결함 2 에서 막은 '도착 부정'이 '언제 도착해?' 대답으로 남아 있었다(검토 NEW-6)
         val rig = Rig()

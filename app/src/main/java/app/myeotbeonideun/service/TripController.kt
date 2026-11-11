@@ -141,7 +141,17 @@ class TripController(private val context: Context, private val c: AppContainer) 
         // 음성 인식(실험 기능)은 '말하는 중' 수집보다 먼저 시작한다(결함 9). 수집은 지금 값(소개말을 말하는 중)을 바로
         // 받아 pause 를 부르는데, 그때 듣기가 시작되지 않은 상태면 pause 가 무시되어 소개말 동안 듣게 된다.
         if (settings.listenEnabled) {
-            c.listener.start { intent -> engine?.let { perform(it.onPassengerAsked(intent, now())) } }
+            c.listener.start { intent ->
+                // 엔진이 받아 대답했을 때만 true(같은 물음 쿨다운은 그때만 센다). '잠시 조용히' 중이거나 끝났으면 false.
+                val current = engine
+                val t = now()
+                if (current == null || !current.acceptsQuestions(t)) {
+                    false
+                } else {
+                    perform(current.onPassengerAsked(intent, t))
+                    true
+                }
+            }
         }
 
         job = c.scope.launch {

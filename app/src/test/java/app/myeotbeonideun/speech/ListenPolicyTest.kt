@@ -88,6 +88,24 @@ class ListenPolicyTest {
     }
 
     @Test
+    fun `차가 말하는 중에 온 결과와 엔진이 대답하지 않은 물음은 쿨다운을 쓰지 않는다`() {
+        // 검토 NEW-8: 대답하지 않은 물음이 쿨다운을 잡아 그 뒤 18초 안의 진짜 물음을 버렸다
+        val p = ListenPolicy()
+        var asked = 0
+        assertNull("차가 말하는 중에 온 결과는 엔진에 넘기지도 않는다", p.onResult(PassengerIntent.WHERE, 0, paused = true) { asked++; true })
+        assertEquals(0, asked)
+        assertNull("'잠시 조용히'라 대답하지 않음", p.onResult(PassengerIntent.WHERE, 1_000) { asked++; false })
+        assertEquals(1, asked)
+        assertEquals("앞의 둘이 쿨다운을 쓰지 않아 바로 대답한다", PassengerIntent.WHERE, p.onResult(PassengerIntent.WHERE, 2_000) { asked++; true })
+        assertNull("대답한 뒤로는 18초 쿨다운", p.onResult(PassengerIntent.WHERE, 10_000) { asked++; true })
+        assertEquals("쿨다운 안의 물음은 엔진에 넘기지 않는다", 2, asked)
+        // 차가 말하는 중에 온 결과도 정상 종료다(오류 횟수 0)
+        repeat(2) { p.onError(ListenError.OTHER, 0) }
+        p.onResult(null, 0, paused = true)
+        assertEquals(0, p.errorCount)
+    }
+
+    @Test
     fun `새 동행이면 쿨다운과 오류 횟수를 지운다`() {
         val p = ListenPolicy()
         p.onResult(PassengerIntent.WHERE, 0)

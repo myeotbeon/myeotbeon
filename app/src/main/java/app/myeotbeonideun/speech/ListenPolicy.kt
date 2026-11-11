@@ -33,7 +33,8 @@ enum class ListenError {
  * - 오류 횟수는 인식이 정상으로 끝날 때마다(완성된 결과가 오거나, 오류 없이 끝나면) 0 으로 돌린다. 시간 초과·말 없음은
  *   오류로 세지 않는다. 그래서 '말이 없어 시간 초과'가 몇 번 나도 그 동행 내내 꺼지지 않는다.
  * - 같은 물음 종류에는 [cooldownMs] 안에 다시 대답하지 않는다. 운전자 통화나 라디오의 같은 말에 차가 거듭 끼어들지 않게.
- *   (운전자의 '다시 말씀드리기'는 이것과 상관없이 언제든 된다.)
+ *   (운전자의 '다시 말씀드리기'는 이것과 상관없이 언제든 된다.) 쿨다운은 **실제로 대답했을 때만** 센다 — 차가 말을 시작한
+ *   직후에 온 결과나 엔진이 '잠시 조용히'라 대답하지 않은 물음이 쿨다운을 잡아먹어 그 뒤의 진짜 물음을 버리지 않게(검토 NEW-8).
  * - 이 규칙으로도 누가 한 말인지(동승자·운전자·라디오)는 가리지 못한다. 그래서 실험 기능이고 기본은 꺼져 있다.
  */
 class ListenPolicy(
@@ -61,16 +62,25 @@ class ListenPolicy(
     }
 
     /**
-     * 완성된 인식 결과가 왔다(정상 종료). 오류 횟수를 0 으로 돌린다.
+     * 완성된 인식 결과가 왔다(정상 종료). 오류 횟수를 0 으로 돌린다. 대답할 만한 물음이면 [answer] 에 넘기고,
+     * [answer] 가 true(엔진이 받아 대답함)를 돌려줄 때만 그 종류의 쿨다운을 센다.
      * @param intent 그 문장에서 알아낸 물음(없으면 null)
-     * @return 대답할 물음. 알아낸 것이 없거나 같은 종류를 쿨다운 안에 또 물었으면 null
+     * @param paused 차가 말하는 중이라 듣기를 멈춘 때 온 결과인지(대답하지 않고 쿨다운도 세지 않는다)
+     * @param answer 물음을 엔진에 넘긴다. 엔진이 받아 대답하면 true, '잠시 조용히'나 동행이 끝나 대답하지 않으면 false
+     * @return 대답한 물음. 알아낸 것이 없거나, 같은 종류를 쿨다운 안에 또 물었거나, 대답하지 않았으면 null
      */
-    fun onResult(intent: PassengerIntent?, nowMs: Long): PassengerIntent? {
+    fun onResult(
+        intent: PassengerIntent?,
+        nowMs: Long,
+        paused: Boolean = false,
+        answer: (PassengerIntent) -> Boolean = { true },
+    ): PassengerIntent? {
         errors = 0
         sessionFailed = false
-        if (intent == null) return null
+        if (intent == null || paused) return null
         val last = lastAnswered[intent]
         if (last != null && nowMs - last < cooldownMs) return null
+        if (!answer(intent)) return null
         lastAnswered[intent] = nowMs
         return intent
     }

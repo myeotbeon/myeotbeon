@@ -239,9 +239,15 @@ class CompanionEngine(
         return out
     }
 
+    /**
+     * 지금 동승자의 물음에 대답하는지('잠시 조용히' 중이거나 끝났으면 false). 바깥(음성 인식)은 이것이 true 일 때 넘긴 물음만
+     * 대답한 것으로 센다(같은 물음 쿨다운).
+     */
+    fun acceptsQuestions(nowMs: Long): Boolean = phase != Phase.ENDED && !isQuiet(nowMs)
+
     /** 동승자의 물음을 알아들었다(실험 기능). */
     fun onPassengerAsked(intent: PassengerIntent, nowMs: Long): List<EngineAction> {
-        if (phase == Phase.ENDED || isQuiet(nowMs)) return emptyList()
+        if (!acceptsQuestions(nowMs)) return emptyList()
         val near = stage == Stage.NEAR || stage == Stage.SOON
         val whenSituation = if (near) "ask_when_near" else "ask_when_onway"
         val stopSituation = activeStopSituation()
