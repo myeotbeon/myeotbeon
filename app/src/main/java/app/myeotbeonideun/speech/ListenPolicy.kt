@@ -53,6 +53,7 @@ class ListenPolicy(
         errors = 0
         sessionFailed = false
         lastAnswered.clear()
+        recentErrors.clear()
     }
 
     fun onRecognitionStarted() {
@@ -74,19 +75,33 @@ class ListenPolicy(
         return intent
     }
 
-    /** 인식 한 번이 끝났다. 센 오류 없이 끝났으면 정상 종료다. */
-    fun onEnded() {
-        if (!sessionFailed) errors = 0
+    /**
+     * 인식 한 번이 끝났다. 센 오류 없이 끝났으면 정상 종료다(오류 횟수 0).
+     * @return 정상 종료면 true. false 면 오류 쪽이 이미 다음 요청을 늦춰 걸었으니 여기서 다시 걸지 않는다
+     */
+    fun onEnded(): Boolean {
+        val normal = !sessionFailed
+        if (normal) errors = 0
         sessionFailed = false
+        return normal
     }
 
-    /** @return true 면 이 동행에서는 그만 듣는다(물러난다) */
-    fun onError(error: ListenError): Boolean = when (error) {
+    /** 최근 [ERROR_WINDOW_MS] 안의 오류 시각(끝남과 오류가 어느 순서로 와도 오류가 끝없이 되풀이되지 않게). */
+    private val recentErrors = ArrayDeque<Long>()
+
+    /**
+     * @param nowMs 오류가 난 시각
+     * @return true 면 이 동행에서는 그만 듣는다(물러난다)
+     */
+    fun onError(error: ListenError, nowMs: Long): Boolean = when (error) {
         ListenError.NO_SPEECH -> false
         ListenError.FATAL -> true
         ListenError.OTHER -> {
             sessionFailed = true
-            ++errors >= maxErrors
+            // SDK 가 끝남(onEndedRecognition)을 오류보다 먼저 부르면 매번 '정상 종료'로 0 이 되므로, 1분 안의 오류 수로도 본다.
+            while (recentErrors.isNotEmpty() && nowMs - recentErrors.first() >= ERROR_WINDOW_MS) recentErrors.removeFirst()
+            recentErrors.addLast(nowMs)
+            ++errors >= maxErrors || recentErrors.size >= MAX_ERRORS_IN_WINDOW
         }
     }
 
@@ -94,5 +109,7 @@ class ListenPolicy(
         /** 같은 물음 종류에 다시 대답하기까지의 최소 간격(15~20초). */
         const val COOLDOWN_MS = 18_000L
         const val MAX_ERRORS = 3
+        const val ERROR_WINDOW_MS = 60_000L
+        const val MAX_ERRORS_IN_WINDOW = 6
     }
 }

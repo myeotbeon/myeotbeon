@@ -95,8 +95,8 @@ class PleosPassengerListener(context: Context) : PassengerListener {
         override fun onEndedRecognition() {
             main.post {
                 if (!running) return@post
-                policy.onEnded()
-                if (!paused) scheduleRequest(RESTART_MS)
+                // 오류로 끝난 인식이면 오류 쪽이 늦춰 건 다시 요청(2초)을 그대로 둔다.
+                if (policy.onEnded() && !paused) scheduleRequest(RESTART_MS)
             }
         }
 
@@ -105,7 +105,7 @@ class PleosPassengerListener(context: Context) : PassengerListener {
             main.post {
                 if (!running) return@post
                 when {
-                    policy.onError(error) -> giveUp()
+                    policy.onError(error, SystemClock.elapsedRealtime()) -> giveUp()
                     !paused -> scheduleRequest(if (error == ListenError.NO_SPEECH) RESTART_MS else RETRY_MS)
                 }
             }
